@@ -3,12 +3,15 @@ from tkinter import ttk
 import random
 import serial, time, csv
 import pandas as pd
+import joblib
+import numpy as np
 from PIL import Image, ImageTk
 
 LABELFONT = ("Segoe UI", 16, "bold")
 TEXTFONT = ("Segoe UI", 20, "bold")
 BUTTONFONT = ("Segoe UI", 22, "bold")
 EBUTTONFONT = ("Segoe UI", 16, "bold")
+RESULTFONT = ("Segoe UI", 30, "bold")
 CONDIMENTS = ["Soy Sauce", "Fish Sauce", "Oyster Sauce", "Worcestershire Sauce"]
 
 class App(tk.Tk):
@@ -104,7 +107,7 @@ class ClassificationPage(tk.Frame):
 
 
 class ClassificationReadingPage(tk.Frame):
-    def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600): ## Change port kung ano compatible
+    def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
         self.gathering = True
         header = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
         self.ser = None
@@ -162,7 +165,10 @@ class ClassificationReadingPage(tk.Frame):
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
 
-        self.timer_text_id = self.canvas.create_text(400, 260, text="10:00",
+        next_button = ttk.Button(self.canvas, text="skip", style="TButton", command=lambda: controller.show_frame(ResultPage))
+        self.canvas.create_window(400, 320, window=next_button) ## Para pang check lang ng panels will be removed later on
+
+        self.timer_text_id = self.canvas.create_text(400, 250, text="10:00",
                                                      font=TEXTFONT, fill="WHITE")
 
         self.remaining_time = 600
@@ -216,13 +222,32 @@ class ResultPage(tk.Frame):
                                font=LABELFONT, bg="white")
         title_label.pack(expand=True, fill="both")
 
-        result = random.choice(CONDIMENTS)
-        self.canvas.create_text(400, 200, text=f"RESULT: {result}",
-                font=TEXTFONT, fill="orange")
+        # Load mean sensor data
+        try:
+            data = pd.read_csv("gathered_data.csv").values[0]
+            model = joblib.load("svm_best_model.joblib")
+            # Reshape for prediction (1, 6)
+            pred = model.predict(np.array(data).reshape(1, -1))[0]
+            result = pred
+        except Exception as e:
+            result = f"Error: {e}"
 
-        button1 = ttk.Button(self.canvas, text="Restart", style="TButton",
-                             command=lambda: controller.show_frame(ClassificationPage))
-        self.canvas.create_window(400, 260, window=button1)
+        color_map = {
+            "Soy Sauce": "#F79503",         #placeholders for their colors
+            "Fish Sauce": "#F79503",        
+            "Oyster Sauce": "#F79503",      
+            "Worcestershire Sauce": "#F79503", 
+        }
+        
+        result_color = color_map.get(str(result), "orange")
+        self.canvas.create_text(400, 200, text=f"RESULT: {result}",
+                font=RESULTFONT, fill=result_color)
+
+        button1 = ttk.Button(self.canvas, text="Restart", style="TButton", 
+                             command=lambda: [controller.show_frame(ExhaustPage),
+                                              controller.frames[ExhaustPage].start_timer(controller)])
+        
+        self.canvas.create_window(400, 300, window=button1)
 
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
@@ -255,10 +280,13 @@ class ExhaustPage(tk.Frame):
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
 
-        self.timer_text_id = self.canvas.create_text(400, 260, text="10:00",
+        self.timer_text_id = self.canvas.create_text(400, 250, text="10:00",
                                                      font=TEXTFONT, fill="WHITE")
 
         self.remaining_time = 600
+
+        next_button = ttk.Button(self.canvas, text="skip", style="TButton", command=lambda: controller.show_frame(ClassificationPage))
+        self.canvas.create_window(400, 320, window=next_button) ## Para pang check lang ng panels will be removed later on
 
 
     def start_timer(self, controller):
