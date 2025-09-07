@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import random
 import serial, time, csv
+import pandas as pd
 from PIL import Image, ImageTk
 
 LABELFONT = ("Segoe UI", 16, "bold")
@@ -103,9 +104,9 @@ class ClassificationPage(tk.Frame):
 
 
 class ClassificationReadingPage(tk.Frame):
-    def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
+    def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600): ## Change port kung ano compatible
         self.gathering = True
-        header = ["MQ136", "MQ2", "MQ3", "MQ135", "MQ138", "MQ137"]
+        header = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
         self.ser = None
         try:
             self.ser = serial.Serial(port, baud, timeout=1)
@@ -120,7 +121,13 @@ class ClassificationReadingPage(tk.Frame):
                         values = line.split(",")
                         if len(values) == 6:
                             writer.writerow(values)
-                        # Optionally update UI here
+            # After gathering, calculate mean for each sensor and overwrite the file
+            df = pd.read_csv(filename)
+            means = df[header].astype(float).mean()
+            with open(filename, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerow(list(means))
         except Exception as e:
             print(f"Error during data gathering: {e}")
         finally:
