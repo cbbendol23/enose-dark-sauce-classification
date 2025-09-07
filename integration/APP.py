@@ -4,6 +4,7 @@ import random
 import serial, time, csv
 import pandas as pd
 import joblib
+import os
 import numpy as np
 from PIL import Image, ImageTk
 
@@ -109,7 +110,8 @@ class ClassificationPage(tk.Frame):
 
 
 class ClassificationReadingPage(tk.Frame):
-    def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
+    #def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
+    def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
         self.gathering = True
         header = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
         self.ser = None
@@ -140,9 +142,49 @@ class ClassificationReadingPage(tk.Frame):
                 try: self.ser.close()
                 except: pass
 
+    def skip_and_save(self):
+    # 1) Cancel the timer tick if scheduled
+        if getattr(self, "_timer_after_id", None) is not None:
+            try:
+                self.after_cancel(self._timer_after_id)
+            except Exception:
+                pass
+            self._timer_after_id = None
+
+        # 2) Stop and join the gather thread so the file is closed
+        self.gathering = False
+        if self.gather_thread and self.gather_thread.is_alive():
+            self.gather_thread.join(timeout=2)
+
+        # 3) Save the mean to gathered_data.csv
+        try:
+            header = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            if os.path.exists("gathered_data.csv"):
+                df = pd.read_csv("gathered_data.csv")
+                if not df.empty:
+                    means = df[header].astype(float).mean()
+                    with open("gathered_data.csv", "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(header)
+                        writer.writerow(list(means))
+                else:
+                    print("Skip pressed: gathered_data.csv is empty—nothing to average.")
+            else:
+                print("Skip pressed: gathered_data.csv does not exist yet.")
+        except Exception as e:
+            print(f"Error saving data on skip: {e}")
+
+        # 4) Reflect stopped state and go to results
+        self.canvas.itemconfig(self.timer_text_id, text="Stopped")
+        self.controller.show_frame(ResultPage)
+
+
+
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         self.controller = controller
+        self.gathering = False
+        self.gather_thread = None
         self.bg_image = Image.open("integration/background.png")
         self.bg_image = self.bg_image.resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
@@ -163,24 +205,25 @@ class ClassificationReadingPage(tk.Frame):
 
         self.canvas.create_text(400, 200, text="PROCESS: Gathering Data....",
                                 font=TEXTFONT, fill="white")
-        
+
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
 
-        next_button = ttk.Button(self.canvas, text="skip", style="TButton", command=lambda: controller.show_frame(ResultPage))
+        next_button = ttk.Button(self.canvas, text="skip", style="TButton", command=self.skip_and_save)
         self.canvas.create_window(400, 320, window=next_button) ## Para pang check lang ng panels will be removed later on
 
         self.timer_text_id = self.canvas.create_text(400, 250, text="10:00",
-                                                     font=TEXTFONT, fill="WHITE")
-
+                                 font=TEXTFONT, fill="WHITE")
         self.remaining_time = 600
+
+    
 
 
     def start_timer(self, controller):
         self.remaining_time = 600
         import threading
         self.gathering = True
-        self.gather_thread = threading.Thread(target=self.gather_data)
+        self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
         self.gather_thread.start()
         self.update_timer(controller)
 
@@ -191,15 +234,18 @@ class ClassificationReadingPage(tk.Frame):
 
         self.canvas.itemconfig(self.timer_text_id, text=formatted_time)
 
-        if self.remaining_time > 0:
+        if self.remaining_time > 0 and self.gathering:
             self.remaining_time -= 1
-            self.after(1000, self.update_timer, controller)
+            # store the after id so we can cancel it on skip
+            self._timer_after_id = self.after(1000, self.update_timer, controller)
         else:
+            # stop gathering if time is up (or we've been stopped)
             self.gathering = False
-            if hasattr(self, 'gather_thread'):
+            if self.gather_thread and self.gather_thread.is_alive():
                 self.gather_thread.join(timeout=2)
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ResultPage)
+
 
 
 class ResultPage(tk.Frame):
