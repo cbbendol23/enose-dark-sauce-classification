@@ -113,7 +113,8 @@ class ClassificationReadingPage(tk.Frame):
     #def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
     def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
         self.gathering = True
-        header = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+        sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+        header = ["Label"] + sensor_cols
         self.ser = None
         try:
             self.ser = serial.Serial(port, baud, timeout=1)
@@ -127,20 +128,24 @@ class ClassificationReadingPage(tk.Frame):
                     if line:
                         values = line.split(",")
                         if len(values) == 6:
-                            writer.writerow(values)
+                            writer.writerow(["Unknown"] + values)
             # After gathering, calculate mean for each sensor and overwrite the file
             df = pd.read_csv(filename)
-            means = df[header].astype(float).mean()
+            # Reorder columns if needed before calculating mean
+            df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+            means = df[sensor_cols].astype(float).mean()
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
-                writer.writerow(list(means))
+                writer.writerow(["Unknown"] + list(means))
         except Exception as e:
             print(f"Error during data gathering: {e}")
         finally:
             if self.ser:
-                try: self.ser.close()
-                except: pass
+                try:
+                    self.ser.close()
+                except:
+                    pass
 
     def skip_and_save(self):
     # 1) Cancel the timer tick if scheduled
@@ -158,15 +163,17 @@ class ClassificationReadingPage(tk.Frame):
 
         # 3) Save the mean to gathered_data.csv
         try:
-            header = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            header = ["Label"] + sensor_cols
             if os.path.exists("gathered_data.csv"):
                 df = pd.read_csv("gathered_data.csv")
                 if not df.empty:
-                    means = df[header].astype(float).mean()
+                    df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+                    means = df[sensor_cols].astype(float).mean()
                     with open("gathered_data.csv", "w", newline="") as f:
                         writer = csv.writer(f)
                         writer.writerow(header)
-                        writer.writerow(list(means))
+                        writer.writerow(["Unknown"] + list(means))
                 else:
                     print("Skip pressed: gathered_data.csv is empty—nothing to average.")
             else:
@@ -242,7 +249,7 @@ class ClassificationReadingPage(tk.Frame):
             # stop gathering if time is up (or we've been stopped)
             self.gathering = False
             if self.gather_thread and self.gather_thread.is_alive():
-                self.gather_thread.join(timeout=2)
+                sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ResultPage)
 
@@ -272,7 +279,9 @@ class ResultPage(tk.Frame):
 
         # Load mean sensor data
         try:
-            data = pd.read_csv("gathered_data.csv").values[0]
+            sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            df = pd.read_csv("gathered_data.csv")
+            data = df.loc[0, sensor_cols].values.astype(float)
             model = joblib.load("svm_best_model.joblib")
             # Reshape for prediction (1, 6)
             pred = model.predict(np.array(data).reshape(1, -1))[0]
