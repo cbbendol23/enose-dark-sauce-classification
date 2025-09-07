@@ -17,6 +17,8 @@ CONDIMENTS = ["Soy Sauce", "Fish Sauce", "Oyster Sauce", "Worcestershire Sauce"]
 class App(tk.Tk):
     def __init__(self):
         tk.Tk.__init__(self)
+        self.attributes('-fullscreen', True)
+        self.bind('<Escape>', lambda e: self.attributes('-fullscreen', False))
         container = tk.Frame(self)
         container.pack(fill ="both", expand =True)
         container.grid_rowconfigure(0, weight =1)
