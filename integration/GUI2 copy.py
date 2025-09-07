@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 import random
-import serial, time, csv
 from PIL import Image, ImageTk
 
 LABELFONT = ("Segoe UI", 16, "bold")
@@ -104,6 +103,7 @@ class ClassificationPage(tk.Frame):
 
 class ClassificationReadingPage(tk.Frame):
     def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
+        import serial, time, csv
         self.gathering = True
         header = ["MQ136", "MQ2", "MQ3", "MQ135", "MQ138", "MQ137"]
         self.ser = None
