@@ -113,7 +113,7 @@ class ClassificationReadingPage(tk.Frame):
     def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
     #def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
         self.gathering = True
-        sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+        sensor_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
         header = ["Label"] + sensor_cols
         self.ser = None
         try:
@@ -132,7 +132,7 @@ class ClassificationReadingPage(tk.Frame):
             # After gathering, calculate mean for each sensor and overwrite the file
             df = pd.read_csv(filename)
             # Reorder columns if needed before calculating mean
-            df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+            df = df.reindex(columns=["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"])
             means = df[sensor_cols].astype(float).mean()
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
