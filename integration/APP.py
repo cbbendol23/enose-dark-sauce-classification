@@ -163,12 +163,12 @@ class ClassificationReadingPage(tk.Frame):
 
         # 3) Save the mean to gathered_data.csv
         try:
-            sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            sensor_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
             header = ["Label"] + sensor_cols
             if os.path.exists("gathered_data.csv"):
                 df = pd.read_csv("gathered_data.csv")
                 if not df.empty:
-                    df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+                    df = df.reindex(columns=["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"])
                     means = df[sensor_cols].astype(float).mean()
                     with open("gathered_data.csv", "w", newline="") as f:
                         writer = csv.writer(f)
@@ -249,7 +249,7 @@ class ClassificationReadingPage(tk.Frame):
             # stop gathering if time is up (or we've been stopped)
             self.gathering = False
             if self.gather_thread and self.gather_thread.is_alive():
-                sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+                sensor_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ResultPage)
 
@@ -279,9 +279,14 @@ class ResultPage(tk.Frame):
 
         # Load mean sensor data
         try:
-            sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            # Dynamically match sensor columns by name, not position
+            expected_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
             df = pd.read_csv("gathered_data.csv")
-            data = df.loc[0, sensor_cols].values.astype(float)
+            # Find columns in gathered_data that match expected sensor names
+            available_cols = [col for col in expected_cols if col in df.columns]
+            if len(available_cols) != len(expected_cols):
+                raise ValueError(f"Missing columns in gathered_data.csv: {set(expected_cols) - set(available_cols)}")
+            data = df.loc[0, available_cols].values.astype(float)
             model = joblib.load("svm_best_model.joblib")
             # Reshape for prediction (1, 6)
             pred = model.predict(np.array(data).reshape(1, -1))[0]
