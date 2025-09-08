@@ -279,18 +279,18 @@ class ResultPage(tk.Frame):
 
         # Load mean sensor data
         try:
-            # Dynamically match sensor columns by name, not position
-            expected_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
-            df = pd.read_csv("gathered_data.csv")
-            # Find columns in gathered_data that match expected sensor names
-            available_cols = [col for col in expected_cols if col in df.columns]
-            if len(available_cols) != len(expected_cols):
-                raise ValueError(f"Missing columns in gathered_data.csv: {set(expected_cols) - set(available_cols)}")
-            data = df.loc[0, available_cols].values.astype(float)
-            model = joblib.load("svm_best_model.joblib")
-            # Reshape for prediction (1, 6)
-            pred = model.predict(np.array(data).reshape(1, -1))[0]
-            result = pred
+                # Always read sensor columns in fixed order
+                sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+                df = pd.read_csv("gathered_data.csv")
+                # Reindex to ensure correct order, fill missing with NaN
+                df = df.reindex(columns=sensor_cols)
+                if df.isnull().any().any():
+                    missing = df.columns[df.isnull().any()].tolist()
+                    raise ValueError(f"Missing columns in gathered_data.csv: {missing}")
+                data = df.loc[0, sensor_cols].values.astype(float)
+                model = joblib.load("svm_best_model.joblib")
+                pred = model.predict(np.array(data).reshape(1, -1))[0]
+                result = pred
         except Exception as e:
             result = f"Error: {e}"
 
