@@ -143,7 +143,7 @@ class ClassificationReadingPage(tk.Frame):
         self.canvas.create_window(700, 430, window=exit_button)
 
         skip_button = ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save)
-        self.canvas.create_window(555, 430, window=skip_button)
+        self.canvas.create_window(550, 430, window=skip_button)
 
         self.timer_text_id = self.canvas.create_text(400, 250, text="10:00",
                                  font=TEXTFONT, fill="WHITE")
@@ -270,8 +270,6 @@ class ClassificationReadingPage(tk.Frame):
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ResultPage)
 
-
-
 class ResultPage(tk.Frame):
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
@@ -333,7 +331,7 @@ class ResultPage(tk.Frame):
         button1 = ttk.Button(self.canvas, text="Restart", style="Restart.TButton", 
                              command=lambda: [controller.show_frame(ExhaustPage),
                                               controller.frames[ExhaustPage].start_timer(controller)])
-        self.canvas.create_window(555, 430, window=button1)
+        self.canvas.create_window(550, 430, window=button1)
 
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
@@ -377,7 +375,7 @@ class ExhaustPage(tk.Frame):
 
         skip_button = ttk.Button(self.canvas, text="Skip", style="Restart.TButton", 
                  command=lambda: [controller.show_frame(ClassificationPage)])
-        self.canvas.create_window(555, 430, window=skip_button)
+        self.canvas.create_window(550, 430, window=skip_button)
 
 
     def start_timer(self, controller):
@@ -411,7 +409,6 @@ class ExhaustPage(tk.Frame):
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ClassificationPage) 
         
-
 if __name__ == "__main__":
     app = App()
     app.geometry("800x480")
