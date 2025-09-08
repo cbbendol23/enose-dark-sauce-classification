@@ -113,7 +113,7 @@ class ClassificationReadingPage(tk.Frame):
     def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
     #def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
         self.gathering = True
-        sensor_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
+        sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
         header = ["Label"] + sensor_cols
         self.ser = None
         try:
@@ -132,7 +132,7 @@ class ClassificationReadingPage(tk.Frame):
             # After gathering, calculate mean for each sensor and overwrite the file
             df = pd.read_csv(filename)
             # Reorder columns if needed before calculating mean
-            df = df.reindex(columns=["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"])
+            df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
             means = df[sensor_cols].astype(float).mean()
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -163,12 +163,12 @@ class ClassificationReadingPage(tk.Frame):
 
         # 3) Save the mean to gathered_data.csv
         try:
-            sensor_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
+            sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
             header = ["Label"] + sensor_cols
             if os.path.exists("gathered_data.csv"):
                 df = pd.read_csv("gathered_data.csv")
                 if not df.empty:
-                    df = df.reindex(columns=["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"])
+                    df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
                     means = df[sensor_cols].astype(float).mean()
                     with open("gathered_data.csv", "w", newline="") as f:
                         writer = csv.writer(f)
@@ -249,7 +249,7 @@ class ClassificationReadingPage(tk.Frame):
             # stop gathering if time is up (or we've been stopped)
             self.gathering = False
             if self.gather_thread and self.gather_thread.is_alive():
-                sensor_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
+                sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ResultPage)
 
@@ -280,7 +280,7 @@ class ResultPage(tk.Frame):
         # Load mean sensor data
         try:
             # Dynamically match sensor columns by name, not position
-            expected_cols = ["MQ135", "MQ136", "MQ2", "MQ3", "MQ137", "MQ138"]
+            expected_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
             df = pd.read_csv("gathered_data.csv")
             # Find columns in gathered_data that match expected sensor names
             available_cols = [col for col in expected_cols if col in df.columns]
