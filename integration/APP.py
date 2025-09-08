@@ -100,8 +100,8 @@ class ClassificationPage(tk.Frame):
                                 font=TEXTFONT, fill="white")
 
         button1 = ttk.Button(self.canvas, text="Start Classifying", style="TButton",
-                             command=lambda: [controller.show_frame(ClassificationReadingPage),
-                                              controller.frames[ClassificationReadingPage].start_timer(controller)])
+                 command=lambda: [controller.show_frame(ClassificationReadingPage),
+                          controller.frames[ClassificationReadingPage].start_timer(controller)])
         self.canvas.create_window(400, 280, window=button1)
 
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
@@ -110,8 +110,8 @@ class ClassificationPage(tk.Frame):
 
 
 class ClassificationReadingPage(tk.Frame):
-    #def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
-    def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
+    def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600): ## Change port kung ano compatible
+    #def gather_data(self, filename="gathered_data.csv", port="COM3", baud=9600):
         self.gathering = True
         sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
         header = ["Label"] + sensor_cols
