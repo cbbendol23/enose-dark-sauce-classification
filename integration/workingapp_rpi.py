@@ -1,59 +1,24 @@
-
 import sys
 import os
 import tkinter as tk
-
-def restart_program(app=None, button=None):
-    """Restart the current program, replacing the current process."""
-    if button:
-        button.config(state='disabled')
-    if app:
-        # Attempt to close all resources
-        for frame in getattr(app, 'frames', {}).values():
-            if hasattr(frame, 'stop_serial'):
-                try:
-                    frame.stop_serial()
-                except Exception:
-                    pass
-        # Show restarting message
-        top = tk.Toplevel(app)
-        top.geometry("400x200+300+200")
-        top.overrideredirect(True)
-        tk.Label(top, text="Restarting...", font=TEXTFONT, bg="white").pack(expand=True, fill="both")
-        app.update()
-        app.after(800, lambda: _do_restart())
-        def _do_restart():
-            import sys, os
-            import time
-            sys.stdout.flush()
-            sys.stderr.flush()
-            python = sys.executable if sys.executable else "/usr/bin/python3"
-            if not os.path.exists(python):
-                python = "/usr/bin/python3"
-            os.execv(python, [python] + sys.argv)
-    else:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        python = sys.executable if sys.executable else "/usr/bin/python3"
-        if not os.path.exists(python):
-            python = "/usr/bin/python3"
-        os.execv(python, [python] + sys.argv)
-import tkinter as tk
 from tkinter import ttk
 import threading
-import time, csv, os
+import time, csv
 import pandas as pd
 import joblib
 import numpy as np
 from PIL import Image, ImageTk
 import serial
 
+# ---------------- FONTS ---------------- #
 LABELFONT = ("Segoe UI", 16, "bold")
 TEXTFONT = ("Segoe UI", 20, "bold")
 BUTTONFONT = ("Segoe UI", 22, "bold")
 EBUTTONFONT = ("Segoe UI", 16, "bold")
 RESULTFONT = ("Segoe UI", 30, "bold")
 SENSORFONT = ("Segoe UI", 13, "bold")
+
+CSV_FILE = "integration/gathered_data.csv"
 
 # ---------------- SERIAL PORT MANAGER ---------------- #
 def open_serial(port="/dev/ttyACM0", baud=9600):
@@ -76,11 +41,34 @@ def close_serial(ser):
         except Exception:
             pass
 
+# ---------------- RESTART FUNCTION ---------------- #
+def restart_program(app=None, button=None):
+    if button:
+        button.config(state='disabled')
+    if app:
+        for frame in getattr(app, 'frames', {}).values():
+            if hasattr(frame, 'stop_serial'):
+                try:
+                    frame.stop_serial()
+                except Exception:
+                    pass
+        top = tk.Toplevel(app)
+        top.geometry("400x200+300+200")
+        top.overrideredirect(True)
+        tk.Label(top, text="Restarting...", font=TEXTFONT, bg="white").pack(expand=True, fill="both")
+        app.update()
+        def _do_restart():
+            python = sys.executable
+            os.execv(python, [python] + sys.argv)
+        app.after(800, _do_restart)
+    else:
+        python = sys.executable
+        os.execv(python, [python] + sys.argv)
+
 # ---------------- MAIN APP ---------------- #
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        # Delayed fullscreen activation for touchscreen reliability
         self.after(100, self._activate_fullscreen)
         self.bind('<Escape>', lambda e: self.attributes('-fullscreen', False))
 
@@ -182,7 +170,6 @@ class ClassificationReadingPage(tk.Frame):
         self.latest_values = ["--.--"] * 6
         self.remaining_time = 600
 
-        # Background
         self.bg_image = Image.open("integration/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
@@ -190,7 +177,6 @@ class ClassificationReadingPage(tk.Frame):
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
         self.canvas.create_image(0,0,image=self.bg_photo, anchor="nw")
 
-        # Title
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
         tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
@@ -216,31 +202,32 @@ class ClassificationReadingPage(tk.Frame):
         self.update_sensor_display()
         self.update_timer(controller)
 
-    def gather_data(self, filename="integration/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
+    def gather_data(self, filename=CSV_FILE, port="/dev/ttyACM0", baud=9600):
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
-                print("Could not open COM port, skipping gathering")
+                print("Could not open serial port, skipping gathering")
                 return
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
             header = ["Label"]+sensor_cols
-            rows = []
-            start_time = time.time()
-            while self.gathering and (time.time()-start_time < self.remaining_time):
-                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                if line:
-                    values = line.split(",")
-                    if len(values) == 6:
-                        rows.append(["Unknown"] + values)
-                        self.latest_values = values
-            # Overwrite CSV with only the mean row
-            if rows:
-                df = pd.DataFrame(rows, columns=header)
-                means = df[sensor_cols].astype(float).mean()
-                with open(filename, "w", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(header)
-                    writer.writerow(["Unknown"] + list(means))
+            with open(filename, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                start_time = time.time()
+                while self.gathering and (time.time()-start_time < self.remaining_time):
+                    line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                    if line:
+                        values = line.split(",")
+                        if len(values)==6:
+                            writer.writerow(["Unknown"]+values)
+                            self.latest_values = values
+            # compute mean
+            df = pd.read_csv(filename).reindex(columns=sensor_cols)
+            means = df[sensor_cols].astype(float).mean()
+            with open(filename, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerow(["Unknown"]+list(means))
         except Exception as e:
             print(f"Error during data gathering: {e}")
         finally:
@@ -266,8 +253,6 @@ class ClassificationReadingPage(tk.Frame):
             self.sensor_display_running = False
             self.stop_serial()
             controller.show_frame(ResultPage)
-            controller.frames[ResultPage].update_results() 
-
 
     def skip_and_save(self):
         if getattr(self, "_timer_after_id", None):
@@ -277,16 +262,16 @@ class ClassificationReadingPage(tk.Frame):
         self.gathering = False
         if self.gather_thread and self.gather_thread.is_alive():
             self.gather_thread.join(timeout=2)
-        # Overwrite CSV with only the mean row
+        # save mean
         try:
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
             header = ["Label"]+sensor_cols
-            if os.path.exists("integration/gathered_data.csv"):
-                df = pd.read_csv("integration/gathered_data.csv")
+            if os.path.exists(CSV_FILE):
+                df = pd.read_csv(CSV_FILE)
                 if not df.empty:
                     df = df.reindex(columns=sensor_cols)
                     means = df[sensor_cols].astype(float).mean()
-                    with open("integration/gathered_data.csv", "w", newline="") as f:
+                    with open(CSV_FILE, "w", newline="") as f:
                         writer = csv.writer(f)
                         writer.writerow(header)
                         writer.writerow(["Unknown"]+list(means))
@@ -303,34 +288,28 @@ class ClassificationReadingPage(tk.Frame):
             close_serial(self.ser)
             self.ser = None
 
-        
 # ---------------- RESULT PAGE ---------------- #
 class ResultPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        # ... your background and canvas setup ...
+        self.bg_image = Image.open("integration/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_photo = ImageTk.PhotoImage(self.bg_image)
+        tk.Label(self, image=self.bg_photo).place(x=0,y=0,relwidth=1,relheight=1)
+        self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
+        self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        self.canvas.create_image(0,0,image=self.bg_photo,anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5,y=70,anchor="n",width=550,height=45)
         tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
                  font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
-        # Placeholders for text IDs
-        self.result_text_id = self.canvas.create_text(400, 200, text="", font=RESULTFONT, fill="orange")
-        self.sensor_text_id_1 = self.canvas.create_text(400, 260, text="", font=SENSORFONT, fill="yellow")
-        self.sensor_text_id_2 = self.canvas.create_text(400, 285, text="", font=SENSORFONT, fill="yellow")
-
-        ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
-                   command=lambda: [controller.show_frame(ExhaustPage),
-                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=550, y=430)
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
-
-    def update_results(self):
+        # Load results
         try:
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
-            df = pd.read_csv("integration/gathered_data.csv").reindex(columns=sensor_cols)
-            data = df.iloc[-1][sensor_cols].values.astype(float)
+            df = pd.read_csv(CSV_FILE).reindex(columns=sensor_cols)
+            data = df.loc[0, sensor_cols].values.astype(float)
             sensor_text = "  ".join([f"{col}:{val:.2f}" for col,val in zip(sensor_cols,data)])
             model = joblib.load("svm_best_model.joblib")
             result = model.predict(np.array(data).reshape(1,-1))[0]
@@ -339,13 +318,16 @@ class ResultPage(tk.Frame):
             result = f"Error: {e}"
 
         color_map = {"Soy Sauce":"#F79503","Fish Sauce":"#F79503","Oyster Sauce":"#F79503","Worcestershire Sauce":"#F79503"}
-
-        self.canvas.itemconfig(self.result_text_id, text=f"RESULT: {result}", fill=color_map.get(str(result),"orange"))
-
+        self.canvas.create_text(400,200,text=f"RESULT: {result}",font=RESULTFONT, fill=color_map.get(str(result),"orange"))
         if sensor_text:
             lines = sensor_text.split("  ")
-            self.canvas.itemconfig(self.sensor_text_id_1, text="  ".join(lines[:3]))
-            self.canvas.itemconfig(self.sensor_text_id_2, text="  ".join(lines[3:]))
+            self.canvas.create_text(400,260,text="  ".join(lines[:3]), font=SENSORFONT, fill="yellow")
+            self.canvas.create_text(400,285,text="  ".join(lines[3:]), font=SENSORFONT, fill="yellow")
+
+        ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
+                   command=lambda: [controller.show_frame(ExhaustPage),
+                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=550, y=430)
+        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
 
 # ---------------- EXHAUST PAGE ---------------- #
 class ExhaustPage(tk.Frame):
@@ -376,8 +358,6 @@ class ExhaustPage(tk.Frame):
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
                    command=lambda: [self.stop_serial(), controller.quit()]).place(x=700, y=430)
-
-    # Add Skip button
         ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
             command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=550, y=430)
 
@@ -395,7 +375,7 @@ class ExhaustPage(tk.Frame):
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
-                print("Could not open COM port for exhaust")
+                print("Could not open serial port for exhaust")
                 return
             while self.gathering and self.remaining_time>0:
                 line = self.ser.readline().decode('utf-8', errors='ignore').strip()
