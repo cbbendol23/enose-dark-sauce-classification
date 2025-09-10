@@ -172,95 +172,7 @@ class ClassificationPage(tk.Frame):
 
 # ---------------- CLASSIFICATION READING PAGE ---------------- #
 class ClassificationReadingPage(tk.Frame):
-    def __init__(self, parent, controller):
-        super().__init__(parent)
-        self.controller = controller
-        self.ser = None
-        self.gathering = False
-        self.gather_thread = None
-        self.sensor_display_running = False
-        self.latest_values = ["--.--"] * 6
-        self.remaining_time = 600
-
-        # Background
-        self.bg_image = Image.open("integration/background.png").resize((800,480), Image.LANCZOS)
-        self.bg_photo = ImageTk.PhotoImage(self.bg_image)
-        tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
-        self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
-        self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.canvas.create_image(0,0,image=self.bg_photo, anchor="nw")
-
-        # Title
-        title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
-                 font=LABELFONT, bg="white").pack(expand=True, fill="both")
-
-        self.canvas.create_text(400, 200, text="PROCESS: Gathering Data....", font=TEXTFONT, fill="white")
-        self.sensor_text_id_1 = self.canvas.create_text(400, 290, text="MQ2: --.--  MQ3: --.--  MQ135: --.--", font=SENSORFONT, fill="yellow")
-        self.sensor_text_id_2 = self.canvas.create_text(400, 315, text="MQ136: --.--  MQ137: --.--  MQ138: --.--", font=SENSORFONT, fill="yellow")
-        self.timer_text_id = self.canvas.create_text(400, 250, text="10:00", font=TEXTFONT, fill="white")
-
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
-                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=700, y=430)
-        ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save).place(x=550, y=430)
-
-    # ---------------- SERIAL HANDLING ---------------- #
-    def start_timer(self, controller):
-        self.remaining_time = 600
-        self.gathering = True
-        self.sensor_display_running = True
-        self.latest_values = ["--.--"]*6
-        self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
-        self.gather_thread.start()
-        self.update_sensor_display()
-        self.update_timer(controller)
-
-    def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600):
-        try:
-            self.ser = open_serial(port, baud)
-            if not self.ser:
-                print("Could not open COM port, skipping gathering")
-                return
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
-            header = ["Label"]+sensor_cols
-            # Start with a fresh file and header
-            with open(filename, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(header)
-            start_time = time.time()
-            # Append new data during gathering
-            while self.gathering and (time.time()-start_time < self.remaining_time):
-                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                if line:
-                    values = line.split(",")
-                    if len(values)==6:
-                        with open(filename, "a", newline="") as f:
-                            writer = csv.writer(f)
-                            writer.writerow(["Unknown"]+values)
-                        self.latest_values = values
-            # After gathering, calculate mean and overwrite file with only mean
-            try:
-                df = pd.read_csv(filename).reindex(columns=sensor_cols)
-                means = df[sensor_cols].astype(float).mean()
-                with open(filename, "w", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(header)
-                    writer.writerow(["Unknown"]+list(means))
-            except Exception as e:
-                print(f"Error writing mean to CSV: {e}")
-        except Exception as e:
-            print(f"Error during data gathering: {e}")
-        finally:
-            self.stop_serial()
-
-    def update_sensor_display(self):
-        first_line = f"MQ2: {self.latest_values[0]}  MQ3: {self.latest_values[1]}  MQ135: {self.latest_values[2]}"
-        second_line = f"MQ136: {self.latest_values[3]}  MQ137: {self.latest_values[4]}  MQ138: {self.latest_values[5]}"
-        self.canvas.itemconfig(self.sensor_text_id_1, text=first_line)
-        self.canvas.itemconfig(self.sensor_text_id_2, text=second_line)
-        if self.sensor_display_running:
-            self.after(1000, self.update_sensor_display)
+    ...
 
     def update_timer(self, controller):
         minutes = self.remaining_time // 60
@@ -270,8 +182,14 @@ class ClassificationReadingPage(tk.Frame):
             self.remaining_time -= 1
             self._timer_after_id = self.after(1000, self.update_timer, controller)
         else:
+            # Stop gathering
             self.gathering = False
             self.sensor_display_running = False
+            if self.gather_thread and self.gather_thread.is_alive():
+                self.gather_thread.join(timeout=2)
+
+            # Save mean to CSV before showing result
+            self._save_mean_to_csv()
             self.stop_serial()
             controller.show_frame(ResultPage)
 
@@ -283,31 +201,31 @@ class ClassificationReadingPage(tk.Frame):
         self.gathering = False
         if self.gather_thread and self.gather_thread.is_alive():
             self.gather_thread.join(timeout=2)
-        # save mean
-        try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
-            header = ["Label"]+sensor_cols
-            if os.path.exists("integration/gathered_data.csv"):
-                df = pd.read_csv("integration/gathered_data.csv")
-                if not df.empty:
-                    df = df.reindex(columns=sensor_cols)
-                    means = df[sensor_cols].astype(float).mean()
-                    with open("integration/gathered_data.csv", "w", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(header)
-                        writer.writerow(["Unknown"]+list(means))
-        except Exception as e:
-            print(f"Error saving data on skip: {e}")
+
+        # Save mean to CSV
+        self._save_mean_to_csv()
+
         self.canvas.itemconfig(self.timer_text_id, text="Stopped")
         self.stop_serial()
         self.controller.show_frame(ResultPage)
 
-    def stop_serial(self):
-        self.sensor_display_running = False
-        self.gathering = False
-        if self.ser:
-            close_serial(self.ser)
-            self.ser = None
+    # New helper function to save mean
+    def _save_mean_to_csv(self):
+        FILENAME = "integration/gathered_data.csv"
+        sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+        header = ["Label"] + sensor_cols
+        try:
+            if os.path.exists(FILENAME):
+                df = pd.read_csv(FILENAME)
+                if not df.empty:
+                    df = df.reindex(columns=sensor_cols)
+                    means = df[sensor_cols].astype(float).mean()
+                    with open(FILENAME, "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(header)
+                        writer.writerow(["Unknown"] + list(means))
+        except Exception as e:
+            print(f"Error saving mean to CSV: {e}")
 
 # ---------------- RESULT PAGE ---------------- #
 class ResultPage(tk.Frame):
