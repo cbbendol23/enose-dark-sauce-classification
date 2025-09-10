@@ -80,20 +80,20 @@ def close_serial(ser):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        # Delayed fullscreen activation for touchscreen reliability
-        self.after(100, self._activate_fullscreen)
-        self.bind('<Escape>', lambda e: self.attributes('-fullscreen', False))
 
+        # Set up the main container
         container = tk.Frame(self)
         container.pack(fill="both", expand=True)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
+        # Styles
         style = ttk.Style()
         style.configure("TButton", font=BUTTONFONT, padding=10)
         style.configure("Exit.TButton", font=EBUTTONFONT, padding=4)
         style.configure("Restart.TButton", font=EBUTTONFONT, padding=4)
 
+        # Frames
         self.frames = {}
         for F in (StartPage, ClassificationPage, ClassificationReadingPage, ResultPage, ExhaustPage):
             frame = F(container, self)
@@ -102,16 +102,17 @@ class App(tk.Tk):
 
         self.show_frame(StartPage)
 
-    def _activate_fullscreen(self):
-        self.attributes('-fullscreen', True)
-        self.focus_force()               # force focus
-        self.lift()                      # lift the window above others
-        self.attributes('-topmost', True)
-        self.after(100, lambda: self.attributes('-topmost', False))  # disable topmost after short delay
+        # Fullscreen + focus fix
+        self.attributes("-fullscreen", True)
+        self.focus_force()               # grabs focus immediately
+        self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
+        self.after(100, self.lift)       # ensure window is topmost
+        self.after(200, lambda: self.focus_force())  # extra focus just in case
 
     def show_frame(self, cont):
         frame = self.frames[cont]
         frame.tkraise()
+        frame.focus_set()  # make sure the frame gets focus on first click
 
 # ---------------- START PAGE ---------------- #
 class StartPage(tk.Frame):
