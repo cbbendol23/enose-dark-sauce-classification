@@ -252,6 +252,7 @@ class ClassificationReadingPage(tk.Frame):
             self.gathering = False
             self.sensor_display_running = False
             self.stop_serial()
+            self.save_mean_to_csv()  # <-- add this line
             controller.show_frame(ResultPage)
 
     def skip_and_save(self):
@@ -262,31 +263,19 @@ class ClassificationReadingPage(tk.Frame):
         self.gathering = False
         if self.gather_thread and self.gather_thread.is_alive():
             self.gather_thread.join(timeout=2)
-        # save mean
-        try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
-            header = ["Label"]+sensor_cols
-            if os.path.exists(CSV_FILE):
-                df = pd.read_csv(CSV_FILE)
-                if not df.empty:
-                    df = df.reindex(columns=sensor_cols)
-                    means = df[sensor_cols].astype(float).mean()
-                    with open(CSV_FILE, "w", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(header)
-                        writer.writerow(["Unknown"]+list(means))
-        except Exception as e:
-            print(f"Error saving data on skip: {e}")
+        
+        self.save_mean_to_csv()  # <-- call the new method
+
         self.canvas.itemconfig(self.timer_text_id, text="Stopped")
         self.stop_serial()
         self.controller.show_frame(ResultPage)
 
-    def stop_serial(self):
-        self.sensor_display_running = False
-        self.gathering = False
-        if self.ser:
-            close_serial(self.ser)
-            self.ser = None
+        def stop_serial(self):
+            self.sensor_display_running = False
+            self.gathering = False
+            if self.ser:
+                close_serial(self.ser)
+                self.ser = None
 
 # ---------------- RESULT PAGE ---------------- #
 class ResultPage(tk.Frame):
