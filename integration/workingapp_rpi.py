@@ -43,7 +43,7 @@ RESULTFONT = ("Segoe UI", 30, "bold")
 SENSORFONT = ("Segoe UI", 13, "bold")
 
 # ---------------- SERIAL PORT MANAGER ---------------- #
-def open_serial(port="COM3", baud=9600):
+def open_serial(port="/dev/ttyACM0", baud=9600):
     for attempt in range(5):
         try:
             ser = serial.Serial(port, baud, timeout=1)
@@ -374,7 +374,7 @@ class ExhaustPage(tk.Frame):
         self.update_sensor_display()
         self.update_timer(controller)
 
-    def gather_data(self, port="COM3", baud=9600):
+    def gather_data(self, port="/dev/ttyACM0", baud=9600):
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
