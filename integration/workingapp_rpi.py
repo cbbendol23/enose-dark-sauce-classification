@@ -233,18 +233,13 @@ class ClassificationReadingPage(tk.Frame):
                     if len(values) == 6:
                         rows.append(["Unknown"] + values)
                         self.latest_values = values
-            # Save immediately after gathering finishes
+            # Overwrite CSV with only the mean row
             if rows:
+                df = pd.DataFrame(rows, columns=header)
+                means = df[sensor_cols].astype(float).mean()
                 with open(filename, "w", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow(header)
-                    for r in rows:
-                        writer.writerow(r)
-                # Save mean as second row
-                df = pd.DataFrame(rows, columns=header)
-                means = df[sensor_cols].astype(float).mean()
-                with open(filename, "a", newline="") as f:  # append mean as last row
-                    writer = csv.writer(f)
                     writer.writerow(["Unknown"] + list(means))
         except Exception as e:
             print(f"Error during data gathering: {e}")
@@ -280,7 +275,7 @@ class ClassificationReadingPage(tk.Frame):
         self.gathering = False
         if self.gather_thread and self.gather_thread.is_alive():
             self.gather_thread.join(timeout=2)
-        # save mean
+        # Overwrite CSV with only the mean row
         try:
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
             header = ["Label"]+sensor_cols
