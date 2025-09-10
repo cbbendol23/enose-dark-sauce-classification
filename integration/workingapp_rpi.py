@@ -216,8 +216,7 @@ class ClassificationReadingPage(tk.Frame):
         self.update_sensor_display()
         self.update_timer(controller)
 
-    def gather_data(self, filename="gathered_data.csv", port="/dev/ttyACM0", baud=9600):
-    #def gather_data(self, filename="integration/gathered_data.csv", port="COM3", baud=9600):
+    def gather_data(self, filename="integration/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
@@ -225,23 +224,28 @@ class ClassificationReadingPage(tk.Frame):
                 return
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
             header = ["Label"]+sensor_cols
-            with open(filename, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(header)
-                start_time = time.time()
-                while self.gathering and (time.time()-start_time < self.remaining_time):
-                    line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                    if line:
-                        values = line.split(",")
-                        if len(values)==6:
-                            writer.writerow(["Unknown"]+values)
-                            self.latest_values = values
-            df = pd.read_csv(filename).reindex(columns=sensor_cols)
-            means = df[sensor_cols].astype(float).mean()
-            with open(filename, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(header)
-                writer.writerow(["Unknown"]+list(means))
+            rows = []
+            start_time = time.time()
+            while self.gathering and (time.time()-start_time < self.remaining_time):
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                if line:
+                    values = line.split(",")
+                    if len(values) == 6:
+                        rows.append(["Unknown"] + values)
+                        self.latest_values = values
+            # Save immediately after gathering finishes
+            if rows:
+                with open(filename, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(header)
+                    for r in rows:
+                        writer.writerow(r)
+                # Save mean as second row
+                df = pd.DataFrame(rows, columns=header)
+                means = df[sensor_cols].astype(float).mean()
+                with open(filename, "a", newline="") as f:  # append mean as last row
+                    writer = csv.writer(f)
+                    writer.writerow(["Unknown"] + list(means))
         except Exception as e:
             print(f"Error during data gathering: {e}")
         finally:
