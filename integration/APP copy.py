@@ -138,6 +138,8 @@ class ClassificationReadingPage(tk.Frame):
         # Placeholders for sensor values
         self.sensor_text_id_1 = self.canvas.create_text(400, 290, text="MQ2: --.--  MQ3: --.--  MQ135: --.--", font=SENSORFONT, fill="yellow")
         self.sensor_text_id_2 = self.canvas.create_text(400, 315, text="MQ136: --.--  MQ137: --.--  MQ138: --.--", font=SENSORFONT, fill="yellow")
+        self.latest_values = ["--.--"]*6
+        self.update_sensor_display()
 
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
@@ -149,7 +151,8 @@ class ClassificationReadingPage(tk.Frame):
                                  font=TEXTFONT, fill="WHITE")
         self.remaining_time = 600
 
-    def gather_data(self, filename="integration/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
+    #def gather_data(self, filename="integration/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
+    def gather_data(self, filename="integration/gathered_data.csv", port="COM3", baud=9600):
         self.gathering = True
         sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
         header = ["Label"] + sensor_cols
@@ -161,7 +164,6 @@ class ClassificationReadingPage(tk.Frame):
                 writer = csv.writer(f)
                 writer.writerow(header)
                 self.gather_start_time = time.time()
-                self.latest_values = ["-", "-", "-", "-", "-", "-"]
                 while self.gathering and (time.time() - self.gather_start_time < 600):
                     line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                     if line:
@@ -169,9 +171,10 @@ class ClassificationReadingPage(tk.Frame):
                         if len(values) == 6:
                             writer.writerow(["Unknown"] + values)
                             self.latest_values = values
-                            self.after(0, self.update_sensor_values)
+                    self.after(0, self.update_sensor_display)
+                    time.sleep(1)
             df = pd.read_csv(filename)
-            df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+            df = df.reindex(columns=sensor_cols)
             means = df[sensor_cols].astype(float).mean()
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -186,67 +189,55 @@ class ClassificationReadingPage(tk.Frame):
                 except:
                     pass
 
-    def update_sensor_values(self):
-        # Show placeholder values for GUI-only mode
-        if hasattr(self, 'sensor_text_id_1'):
-            self.canvas.delete(self.sensor_text_id_1)
-        if hasattr(self, 'sensor_text_id_2'):
-            self.canvas.delete(self.sensor_text_id_2)
-        first_line = "MQ2: --.--  MQ3: --.--  MQ135: --.--"
-        second_line = "MQ136: --.--  MQ137: --.--  MQ138: --.--"
-        self.sensor_text_id_1 = self.canvas.create_text(400, 290, text=first_line, font=SENSORFONT, fill="yellow")
-        self.sensor_text_id_2 = self.canvas.create_text(400, 315, text=second_line, font=SENSORFONT, fill="yellow")
-        self.after(1000, self.update_sensor_values)
+    def update_sensor_display(self):
+        first_line = f"MQ2: {self.latest_values[0]}  MQ3: {self.latest_values[1]}  MQ135: {self.latest_values[2]}"
+        second_line = f"MQ136: {self.latest_values[3]}  MQ137: {self.latest_values[4]}  MQ138: {self.latest_values[5]}"
+        self.canvas.itemconfig(self.sensor_text_id_1, text=first_line)
+        self.canvas.itemconfig(self.sensor_text_id_2, text=second_line)
+        self.after(1000, self.update_sensor_display)
 
-    
-    def skip_and_save(self):
-    # 1) Cancel the timer tick if scheduled
-        if getattr(self, "_timer_after_id", None) is not None:
-            try:
-                self.after_cancel(self._timer_after_id)
-            except Exception:
-                pass
-            self._timer_after_id = None
-
-        # 2) Stop and join the gather thread so the file is closed
+    # --- NEW METHOD ---
+    def stop_gathering(self):
         self.gathering = False
         if self.gather_thread and self.gather_thread.is_alive():
             self.gather_thread.join(timeout=2)
+        self.latest_values = ["--.--"]*6
 
-        # 3) Save the mean to gathered_data.csv
+    def skip_and_save(self):
+        self.stop_gathering()
         try:
             sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
             header = ["Label"] + sensor_cols
             if os.path.exists("integration/gathered_data.csv"):
                 df = pd.read_csv("integration/gathered_data.csv")
                 if not df.empty:
-                    df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+                    df = df.reindex(columns=sensor_cols)
                     means = df[sensor_cols].astype(float).mean()
                     with open("integration/gathered_data.csv", "w", newline="") as f:
                         writer = csv.writer(f)
                         writer.writerow(header)
                         writer.writerow(["Unknown"] + list(means))
-                else:
-                    print("Skip pressed: gathered_data.csv is empty—nothing to average.")
-            else:
-                print("Skip pressed: gathered_data.csv does not exist yet.")
         except Exception as e:
             print(f"Error saving data on skip: {e}")
-
-        # 4) Reflect stopped state and go to results
         self.canvas.itemconfig(self.timer_text_id, text="Stopped")
         self.controller.show_frame(ResultPage)
 
-
     def start_timer(self, controller):
+        self.stop_gathering()  # Stop any previous gathering
         self.remaining_time = 600
-        # Show placeholders immediately when timer starts
+        self.latest_values = ["--.--"]*6
         if hasattr(self, 'sensor_text_id_1'):
             self.canvas.itemconfig(self.sensor_text_id_1, text="MQ2: --.--  MQ3: --.--  MQ135: --.--")
         if hasattr(self, 'sensor_text_id_2'):
             self.canvas.itemconfig(self.sensor_text_id_2, text="MQ136: --.--  MQ137: --.--  MQ138: --.--")
+        # Clear previous data
+        try:
+            with open("integration/gathered_data.csv", "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Label", "MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+        except Exception:
+            pass
         import threading
-        self.gathering = True
         self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
         self.gather_thread.start()
         self.update_timer(controller)
@@ -260,13 +251,9 @@ class ClassificationReadingPage(tk.Frame):
 
         if self.remaining_time > 0 and self.gathering:
             self.remaining_time -= 1
-            # store the after id so we can cancel it on skip
             self._timer_after_id = self.after(1000, self.update_timer, controller)
         else:
-            # stop gathering if time is up (or we've been stopped)
-            self.gathering = False
-            if self.gather_thread and self.gather_thread.is_alive():
-                sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+            self.stop_gathering()
             self.canvas.itemconfig(self.timer_text_id, text="Done...")
             controller.show_frame(ResultPage)
 
@@ -364,6 +351,7 @@ class ExhaustPage(tk.Frame):
     # Placeholders for sensor values
         self.sensor_text_id_1 = self.canvas.create_text(400, 290, text="MQ2: --.--  MQ3: --.--  MQ135: --.--", font=SENSORFONT, fill="yellow")
         self.sensor_text_id_2 = self.canvas.create_text(400, 315, text="MQ136: --.--  MQ137: --.--  MQ138: --.--", font=SENSORFONT, fill="yellow")
+        self.update_sensor_display()
 
         exit_button = ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit)
         self.canvas.create_window(700, 430, window=exit_button)
@@ -387,13 +375,21 @@ class ExhaustPage(tk.Frame):
             self.canvas.itemconfig(self.sensor_text_id_2, text="MQ136: --.--  MQ137: --.--  MQ138: --.--")
         self.update_timer(controller)
 
-    def update_sensor_values(self):
-        # Show placeholder values for GUI-only mode
-        if hasattr(self, 'sensor_text_id_1'):
+    def update_sensor_display(self):
+        # Try to read latest values from gathered_data.csv
+        try:
+            df = pd.read_csv("integration/gathered_data.csv")
+            if not df.empty:
+                vals = df.loc[0, ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]].values
+                first_line = f"MQ2: {vals[0]}  MQ3: {vals[1]}  MQ135: {vals[2]}"
+                second_line = f"MQ136: {vals[3]}  MQ137: {vals[4]}  MQ138: {vals[5]}"
+                self.canvas.itemconfig(self.sensor_text_id_1, text=first_line)
+                self.canvas.itemconfig(self.sensor_text_id_2, text=second_line)
+        except Exception:
+            # Show placeholder if error
             self.canvas.itemconfig(self.sensor_text_id_1, text="MQ2: --.--  MQ3: --.--  MQ135: --.--")
-        if hasattr(self, 'sensor_text_id_2'):
             self.canvas.itemconfig(self.sensor_text_id_2, text="MQ136: --.--  MQ137: --.--  MQ138: --.--")
-        self.after(1000, self.update_sensor_values)
+        self.after(1000, self.update_sensor_display)
 
     def update_timer(self, controller):
         minutes = self.remaining_time // 60
