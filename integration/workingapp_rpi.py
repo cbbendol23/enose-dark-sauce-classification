@@ -99,7 +99,7 @@ class App(tk.Tk):
     def show_frame(self, cont):
         frame = self.frames[cont]
         frame.tkraise()
-
+    
 # ---------------- START PAGE ---------------- #
 class StartPage(tk.Frame):
     def __init__(self, parent, controller):
@@ -201,6 +201,22 @@ class ClassificationReadingPage(tk.Frame):
         self.gather_thread.start()
         self.update_sensor_display()
         self.update_timer(controller)
+
+    def save_mean_to_csv(self, filename="integration/gathered_data.csv"):
+        try:
+            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+            header = ["Label"] + sensor_cols
+            if os.path.exists(filename):
+                df = pd.read_csv(filename)
+                if not df.empty:
+                    df = df.reindex(columns=sensor_cols)
+                    means = df[sensor_cols].astype(float).mean()
+                    with open(filename, "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(header)
+                        writer.writerow(["Unknown"] + list(means))
+        except Exception as e:
+            print(f"Error saving data: {e}")
 
     def gather_data(self, filename=CSV_FILE, port="/dev/ttyACM0", baud=9600):
         try:
