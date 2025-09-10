@@ -141,7 +141,7 @@ class ClassificationReadingPage(tk.Frame):
             # After gathering, calculate mean for each sensor and overwrite the file
             df = pd.read_csv(filename)
             # Reorder columns if needed before calculating mean
-            df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+            #df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
             means = df[sensor_cols].astype(float).mean()
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -177,7 +177,7 @@ class ClassificationReadingPage(tk.Frame):
             if os.path.exists("gathered_data.csv"):
                 df = pd.read_csv("gathered_data.csv")
                 if not df.empty:
-                    df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
+                    #df = df.reindex(columns=["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"])
                     means = df[sensor_cols].astype(float).mean()
                     with open("gathered_data.csv", "w", newline="") as f:
                         writer = csv.writer(f)
@@ -292,7 +292,7 @@ class ResultPage(tk.Frame):
                 sensor_cols = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
                 df = pd.read_csv("gathered_data.csv")
                 # Reindex to ensure correct order, fill missing with NaN
-                df = df.reindex(columns=sensor_cols)
+                #df = df.reindex(columns=sensor_cols)
                 if df.isnull().any().any():
                     missing = df.columns[df.isnull().any()].tolist()
                     raise ValueError(f"Missing columns in gathered_data.csv: {missing}")
