@@ -327,7 +327,8 @@ class ResultPage(tk.Frame):
         try:
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
             df = pd.read_csv("integration/gathered_data.csv").reindex(columns=sensor_cols)
-            data = df.loc[0, sensor_cols].values.astype(float)
+            # Use the last row (mean row) for prediction and display
+            data = df.iloc[-1][sensor_cols].values.astype(float)
             sensor_text = "  ".join([f"{col}:{val:.2f}" for col,val in zip(sensor_cols,data)])
             model = joblib.load("svm_best_model.joblib")
             result = model.predict(np.array(data).reshape(1,-1))[0]
