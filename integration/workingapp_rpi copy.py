@@ -104,9 +104,10 @@ class App(tk.Tk):
 
     def _activate_fullscreen(self):
         self.attributes('-fullscreen', True)
-        self.focus_force()
+        self.focus_force()               # force focus
+        self.lift()                      # lift the window above others
         self.attributes('-topmost', True)
-        self.after(500, lambda: self.attributes('-topmost', False))
+        self.after(100, lambda: self.attributes('-topmost', False))  # disable topmost after short delay
 
     def show_frame(self, cont):
         frame = self.frames[cont]
