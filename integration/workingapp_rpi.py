@@ -266,33 +266,35 @@ class ClassificationReadingPage(tk.Frame):
             self.sensor_display_running = False
             self.stop_serial()
             controller.show_frame(ResultPage)
+            controller.frames[ResultPage].update_results() 
 
-    def skip_and_save(self):
-        if getattr(self, "_timer_after_id", None):
-            try: self.after_cancel(self._timer_after_id)
-            except: pass
-            self._timer_after_id = None
-        self.gathering = False
-        if self.gather_thread and self.gather_thread.is_alive():
-            self.gather_thread.join(timeout=2)
-        # Overwrite CSV with only the mean row
-        try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
-            header = ["Label"]+sensor_cols
-            if os.path.exists("integration/gathered_data.csv"):
-                df = pd.read_csv("integration/gathered_data.csv")
-                if not df.empty:
-                    df = df.reindex(columns=sensor_cols)
-                    means = df[sensor_cols].astype(float).mean()
-                    with open("integration/gathered_data.csv", "w", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(header)
-                        writer.writerow(["Unknown"]+list(means))
-        except Exception as e:
-            print(f"Error saving data on skip: {e}")
-        self.canvas.itemconfig(self.timer_text_id, text="Stopped")
-        self.stop_serial()
-        self.controller.show_frame(ResultPage)
+
+        def skip_and_save(self):
+            if getattr(self, "_timer_after_id", None):
+                try: self.after_cancel(self._timer_after_id)
+                except: pass
+                self._timer_after_id = None
+            self.gathering = False
+            if self.gather_thread and self.gather_thread.is_alive():
+                self.gather_thread.join(timeout=2)
+            # Overwrite CSV with only the mean row
+            try:
+                sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+                header = ["Label"]+sensor_cols
+                if os.path.exists("integration/gathered_data.csv"):
+                    df = pd.read_csv("integration/gathered_data.csv")
+                    if not df.empty:
+                        df = df.reindex(columns=sensor_cols)
+                        means = df[sensor_cols].astype(float).mean()
+                        with open("integration/gathered_data.csv", "w", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(header)
+                            writer.writerow(["Unknown"]+list(means))
+            except Exception as e:
+                print(f"Error saving data on skip: {e}")
+            self.canvas.itemconfig(self.timer_text_id, text="Stopped")
+            self.stop_serial()
+            self.controller.show_frame(ResultPage)
 
     def stop_serial(self):
         self.sensor_display_running = False
@@ -301,28 +303,33 @@ class ClassificationReadingPage(tk.Frame):
             close_serial(self.ser)
             self.ser = None
 
+        
 # ---------------- RESULT PAGE ---------------- #
 class ResultPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration/background.png").resize((800,480), Image.LANCZOS)
-        self.bg_photo = ImageTk.PhotoImage(self.bg_image)
-        tk.Label(self, image=self.bg_photo).place(x=0,y=0,relwidth=1,relheight=1)
-        self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
-        self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.canvas.create_image(0,0,image=self.bg_photo,anchor="nw")
+        # ... your background and canvas setup ...
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5,y=70,anchor="n",width=550,height=45)
         tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
                  font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
-        # Load results
+        # Placeholders for text IDs
+        self.result_text_id = self.canvas.create_text(400, 200, text="", font=RESULTFONT, fill="orange")
+        self.sensor_text_id_1 = self.canvas.create_text(400, 260, text="", font=SENSORFONT, fill="yellow")
+        self.sensor_text_id_2 = self.canvas.create_text(400, 285, text="", font=SENSORFONT, fill="yellow")
+
+        ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
+                   command=lambda: [controller.show_frame(ExhaustPage),
+                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=550, y=430)
+        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
+
+    def update_results(self):
         try:
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
             df = pd.read_csv("integration/gathered_data.csv").reindex(columns=sensor_cols)
-            # Use the last row (mean row) for prediction and display
             data = df.iloc[-1][sensor_cols].values.astype(float)
             sensor_text = "  ".join([f"{col}:{val:.2f}" for col,val in zip(sensor_cols,data)])
             model = joblib.load("svm_best_model.joblib")
@@ -332,16 +339,13 @@ class ResultPage(tk.Frame):
             result = f"Error: {e}"
 
         color_map = {"Soy Sauce":"#F79503","Fish Sauce":"#F79503","Oyster Sauce":"#F79503","Worcestershire Sauce":"#F79503"}
-        self.canvas.create_text(400,200,text=f"RESULT: {result}",font=RESULTFONT, fill=color_map.get(str(result),"orange"))
+
+        self.canvas.itemconfig(self.result_text_id, text=f"RESULT: {result}", fill=color_map.get(str(result),"orange"))
+
         if sensor_text:
             lines = sensor_text.split("  ")
-            self.canvas.create_text(400,260,text="  ".join(lines[:3]), font=SENSORFONT, fill="yellow")
-            self.canvas.create_text(400,285,text="  ".join(lines[3:]), font=SENSORFONT, fill="yellow")
-
-        ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
-                   command=lambda: [controller.show_frame(ExhaustPage),
-                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=550, y=430)
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
+            self.canvas.itemconfig(self.sensor_text_id_1, text="  ".join(lines[:3]))
+            self.canvas.itemconfig(self.sensor_text_id_2, text="  ".join(lines[3:]))
 
 # ---------------- EXHAUST PAGE ---------------- #
 class ExhaustPage(tk.Frame):
