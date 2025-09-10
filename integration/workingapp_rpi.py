@@ -1,4 +1,7 @@
+
 import sys
+import os
+import tkinter as tk
 
 def restart_program(app=None, button=None):
     """Restart the current program, replacing the current process."""
@@ -20,10 +23,20 @@ def restart_program(app=None, button=None):
         app.update()
         app.after(800, lambda: _do_restart())
         def _do_restart():
-            python = sys.executable
+            import sys, os
+            import time
+            sys.stdout.flush()
+            sys.stderr.flush()
+            python = sys.executable if sys.executable else "/usr/bin/python3"
+            if not os.path.exists(python):
+                python = "/usr/bin/python3"
             os.execv(python, [python] + sys.argv)
     else:
-        python = sys.executable
+        sys.stdout.flush()
+        sys.stderr.flush()
+        python = sys.executable if sys.executable else "/usr/bin/python3"
+        if not os.path.exists(python):
+            python = "/usr/bin/python3"
         os.execv(python, [python] + sys.argv)
 import tkinter as tk
 from tkinter import ttk
