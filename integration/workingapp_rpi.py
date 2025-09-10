@@ -269,32 +269,32 @@ class ClassificationReadingPage(tk.Frame):
             controller.frames[ResultPage].update_results() 
 
 
-        def skip_and_save(self):
-            if getattr(self, "_timer_after_id", None):
-                try: self.after_cancel(self._timer_after_id)
-                except: pass
-                self._timer_after_id = None
-            self.gathering = False
-            if self.gather_thread and self.gather_thread.is_alive():
-                self.gather_thread.join(timeout=2)
-            # Overwrite CSV with only the mean row
-            try:
-                sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
-                header = ["Label"]+sensor_cols
-                if os.path.exists("integration/gathered_data.csv"):
-                    df = pd.read_csv("integration/gathered_data.csv")
-                    if not df.empty:
-                        df = df.reindex(columns=sensor_cols)
-                        means = df[sensor_cols].astype(float).mean()
-                        with open("integration/gathered_data.csv", "w", newline="") as f:
-                            writer = csv.writer(f)
-                            writer.writerow(header)
-                            writer.writerow(["Unknown"]+list(means))
-            except Exception as e:
-                print(f"Error saving data on skip: {e}")
-            self.canvas.itemconfig(self.timer_text_id, text="Stopped")
-            self.stop_serial()
-            self.controller.show_frame(ResultPage)
+    def skip_and_save(self):
+        if getattr(self, "_timer_after_id", None):
+            try: self.after_cancel(self._timer_after_id)
+            except: pass
+            self._timer_after_id = None
+        self.gathering = False
+        if self.gather_thread and self.gather_thread.is_alive():
+            self.gather_thread.join(timeout=2)
+        # Overwrite CSV with only the mean row
+        try:
+            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+            header = ["Label"]+sensor_cols
+            if os.path.exists("integration/gathered_data.csv"):
+                df = pd.read_csv("integration/gathered_data.csv")
+                if not df.empty:
+                    df = df.reindex(columns=sensor_cols)
+                    means = df[sensor_cols].astype(float).mean()
+                    with open("integration/gathered_data.csv", "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(header)
+                        writer.writerow(["Unknown"]+list(means))
+        except Exception as e:
+            print(f"Error saving data on skip: {e}")
+        self.canvas.itemconfig(self.timer_text_id, text="Stopped")
+        self.stop_serial()
+        self.controller.show_frame(ResultPage)
 
     def stop_serial(self):
         self.sensor_display_running = False
