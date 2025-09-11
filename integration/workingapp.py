@@ -215,7 +215,7 @@ class ClassificationReadingPage(tk.Frame):
             if not self.ser:
                 print("Could not open COM port, skipping gathering")
                 return
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+            sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
             header = ["Label"]+sensor_cols
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -281,7 +281,7 @@ class ClassificationReadingPage(tk.Frame):
             self.gather_thread.join(timeout=2)
         # save mean to a new file
         try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+            sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
             header = ["Label"]+sensor_cols
             if os.path.exists("integration/gathered_data.csv"):
                 df = pd.read_csv("integration/gathered_data.csv")
@@ -356,7 +356,7 @@ class ResultPage(tk.Frame):
 
     def update_results(self):
         try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136","MQ137","MQ138"]
+            sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
             df = pd.read_csv("integration/gathered_data_mean.csv").reindex(columns=sensor_cols)
             data = df.loc[0, sensor_cols].values.astype(float)
             sensor_text = "  ".join([f"{col}:{val:.2f}" for col,val in zip(sensor_cols,data)])
