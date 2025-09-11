@@ -363,20 +363,42 @@ class ResultPage(tk.Frame):
 
     def update_results(self):
         try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
-            df = pd.read_csv("integration/gathered_data_mean.csv").reindex(columns=["Label"] + sensor_cols)
-            data = df.loc[0, sensor_cols].values.astype(float)
-            sensor_text = "  ".join([f"{col}:{val:.2f}" for col,val in zip(sensor_cols,data)])
+            # 1) Load model first so we know the expected columns
             model = joblib.load("svm_best_model.joblib")
-            X_infer = pd.DataFrame([data], columns=sensor_cols)  # sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
+            expected_cols = list(getattr(model, "feature_names_in_", ["MQ2","MQ3","MQ135","MQ136"]))
+
+            # 2) Read mean file, clean headers, and enforce column order
+            df = pd.read_csv("integration/gathered_data_mean.csv")
+
+            # strip any accidental spaces in headers (e.g., " MQ2")
+            df.rename(columns=lambda c: c.strip(), inplace=True)
+
+            # ensure the file has all expected columns
+            missing = [c for c in expected_cols if c not in df.columns]
+            if missing:
+                raise ValueError(f"Missing columns in gathered_data_mean.csv: {missing}")
+
+            # 3) Get the first row in the exact expected order and as float
+            row = df.loc[0, expected_cols].astype(float).tolist()
+
+            # 4) Build a 1-row DataFrame with the exact feature names
+            X_infer = pd.DataFrame([row], columns=expected_cols)
+
+            # 5) Predict
             result = model.predict(X_infer)[0]
+
+            # --- pretty printing of sensor values ---
+            sensor_text = "  ".join(f"{c}:{v:.2f}" for c, v in zip(expected_cols, row))
+
         except Exception as e:
-            sensor_text = ""
             result = f"Error: {e}"
+            sensor_text = ""
 
-        color_map = {"Soy Sauce":"#F79503","Fish Sauce":"#F79503","Oyster Sauce":"#F79503","Worcestershire Sauce":"#F79503"}
+        color_map = {"Soy Sauce":"#F79503","Fish Sauce":"#F79503",
+                    "Oyster Sauce":"#F79503","Worcestershire Sauce":"#F79503"}
 
-        self.canvas.itemconfig(self.result_text_id, text=f"RESULT: {result}", fill=color_map.get(str(result),"orange"))
+        self.canvas.itemconfig(self.result_text_id, text=f"RESULT: {result}",
+                            fill=color_map.get(str(result), "orange"))
         if sensor_text:
             self.canvas.itemconfig(self.sensor_text_id_1, text=sensor_text)
 
