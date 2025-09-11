@@ -368,7 +368,8 @@ class ResultPage(tk.Frame):
             data = df.loc[0, sensor_cols].values.astype(float)
             sensor_text = "  ".join([f"{col}:{val:.2f}" for col,val in zip(sensor_cols,data)])
             model = joblib.load("svm_best_model.joblib")
-            result = model.predict(np.array(data).reshape(1,-1))[0]
+            X_infer = pd.DataFrame([data], columns=sensor_cols)  # sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
+            result = model.predict(X_infer)[0]
         except Exception as e:
             sensor_text = ""
             result = f"Error: {e}"
