@@ -364,7 +364,7 @@ class ResultPage(tk.Frame):
     def update_results(self):
         try:
             # 1) Load model first so we know the expected columns
-            model = joblib.load("integration_RBF/svm_best_model.joblib")
+            model = joblib.load("integration_RBF/svm_best_model_RBF.joblib")
             expected_cols = list(getattr(model, "feature_names_in_", ["MQ2","MQ3","MQ135","MQ136"]))
 
             # 2) Read mean file, clean headers, and enforce column order
