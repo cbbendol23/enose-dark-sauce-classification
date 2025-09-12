@@ -215,20 +215,14 @@ class ClassificationReadingPage(tk.Frame):
     def gather_data(self, filename="integration_RBF/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
         sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
         header = ["Label"] + sensor_cols
-        all_data_filename = "integration_RBF/all_gathered_data.csv"  # Only store mean row
-
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
                 print("Could not open COM port, skipping gathering")
                 return
 
-            # write header fresh for main file
+            # write header fresh
             with open(filename, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(header)
-            # write header fresh for all data file
-            with open(all_data_filename, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
 
@@ -239,7 +233,6 @@ class ClassificationReadingPage(tk.Frame):
                     values = line.split(",")
                     if len(values) >= 4:
                         row = ["Unknown"] + values[:4]
-                        # Save to main file
                         with open(filename, "a", newline="") as f:
                             writer = csv.writer(f)
                             writer.writerow(row)
@@ -255,13 +248,6 @@ class ClassificationReadingPage(tk.Frame):
                                 mwriter.writerow(["Unknown"] + list(means))
                                 mf.flush()
                                 os.fsync(mf.fileno())
-                            # Save mean to all_gathered_data.csv (overwrite each time)
-                            with open(all_data_filename, "w", newline="") as af:
-                                awriter = csv.writer(af)
-                                awriter.writerow(header)
-                                awriter.writerow(["Unknown"] + list(means))
-                                af.flush()
-                                os.fsync(af.fileno())
                         except Exception as e:
                             print(f"Error writing mean to new file: {e}")
         except Exception as e:
@@ -425,7 +411,7 @@ class ExhaustPage(tk.Frame):
         self.gathering = False
         self.sensor_display_running = False
         self.latest_values = ["--.--"] * 4
-        self.remaining_time = 1200  # 15 minutes exhaust
+        self.remaining_time = 900  # 15 minutes exhaust
 
         self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
@@ -449,7 +435,7 @@ class ExhaustPage(tk.Frame):
             command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=490, y=430)
 
     def start_timer(self, controller):
-        self.remaining_time = 1200
+        self.remaining_time = 900
         self.gathering = True
         self.sensor_display_running = True
         self.latest_values = ["--.--"] * 4
