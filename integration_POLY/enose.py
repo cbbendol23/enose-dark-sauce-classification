@@ -107,7 +107,7 @@ class StartPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_POLY/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
 
@@ -124,15 +124,15 @@ class StartPage(tk.Frame):
         ttk.Button(canvas, text="Start", style="TButton",
                    command=lambda: [controller.show_frame(ClassificationReadingPage),
                                     controller.frames[ClassificationReadingPage].start_timer(controller)]
-                   ).place(x=300, y=280)
-        ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
+                   ).place(x=295, y=265)
+        ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
 
 # ---------------- CLASSIFICATION PAGE ---------------- #
 class ClassificationPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_POLY/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
 
@@ -151,14 +151,14 @@ class ClassificationPage(tk.Frame):
         start_btn = ttk.Button(canvas, text="Start Classifying", style="TButton",
                    command=lambda: [controller.show_frame(ClassificationReadingPage),
                                     controller.frames[ClassificationReadingPage].start_timer(controller)])
-        start_btn.place(x=300, y=280)
+        start_btn.place(x=285, y=265)
 
         restart_btn = ttk.Button(canvas, text="Restart App", style="Restart.TButton")
         restart_btn.config(command=lambda: restart_program(app=controller.master, button=restart_btn))
-        restart_btn.place(x=100, y=430)
+        restart_btn.place(x=10, y=430)
 
         exit_btn = ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit)
-        exit_btn.place(x=700, y=430)
+        exit_btn.place(x=640, y=430)
 
 # ---------------- CLASSIFICATION READING PAGE ---------------- #
 class ClassificationReadingPage(tk.Frame):
@@ -180,7 +180,7 @@ class ClassificationReadingPage(tk.Frame):
         self.remaining_time = 600
 
         # Background
-        self.bg_image = Image.open("integration_POLY/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
         self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
@@ -198,8 +198,8 @@ class ClassificationReadingPage(tk.Frame):
         self.timer_text_id = self.canvas.create_text(400, 250, text="10:00", font=TEXTFONT, fill="white")
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
-                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=700, y=430)
-        ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save).place(x=550, y=430)
+                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
+        ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save).place(x=490, y=430)
 
     # ---------------- SERIAL HANDLING ---------------- #
     def start_timer(self, controller):
@@ -212,7 +212,7 @@ class ClassificationReadingPage(tk.Frame):
         self.update_sensor_display()
         self.update_timer(controller)
 
-    def gather_data(self, filename="integration_POLY/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
+    def gather_data(self, filename="integration_RBF/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
         sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
         header = ["Label"] + sensor_cols
         try:
@@ -241,7 +241,7 @@ class ClassificationReadingPage(tk.Frame):
                         try:
                             df = pd.read_csv(filename).reindex(columns=["Label"] + sensor_cols)
                             means = df[sensor_cols].astype(float).mean()
-                            mean_filename = "integration_POLY/gathered_data_mean.csv"
+                            mean_filename = "integration_RBF/gathered_data_mean.csv"
                             with open(mean_filename, "w", newline="") as mf:
                                 mwriter = csv.writer(mf)
                                 mwriter.writerow(header)
@@ -290,12 +290,12 @@ class ClassificationReadingPage(tk.Frame):
         try:
             sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
             header = ["Label"] + sensor_cols
-            if os.path.exists("integration_POLY/gathered_data.csv"):
-                df = pd.read_csv("integration_POLY/gathered_data.csv")
+            if os.path.exists("integration_RBF/gathered_data.csv"):
+                df = pd.read_csv("integration_RBF/gathered_data.csv")
                 if not df.empty:
                     df = df.reindex(columns=["Label"] + sensor_cols)
                     means = df[sensor_cols].astype(float).mean()
-                    mean_filename = "integration_POLY/gathered_data_mean.csv"
+                    mean_filename = "integration_RBF/gathered_data_mean.csv"
                     with open(mean_filename, "w", newline="") as f:
                         writer = csv.writer(f)
                         writer.writerow(header)
@@ -315,7 +315,7 @@ class ProcessingPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_POLY/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
         canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
@@ -338,7 +338,7 @@ class ResultPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_POLY/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0,y=0,relwidth=1,relheight=1)
         self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
@@ -356,19 +356,19 @@ class ResultPage(tk.Frame):
 
         ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
                    command=lambda: [controller.show_frame(ExhaustPage),
-                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=550, y=430)
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
+                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=490, y=430)
+        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
 
         self.update_results()
 
     def update_results(self):
         try:
             # 1) Load model first so we know the expected columns
-            model = joblib.load("integration_POLY/svm_best_model_POLY.joblib")
+            model = joblib.load("integration_RBF/svm_best_model_POLY.joblib")
             expected_cols = list(getattr(model, "feature_names_in_", ["MQ2","MQ3","MQ135","MQ136"]))
 
             # 2) Read mean file, clean headers, and enforce column order
-            df = pd.read_csv("integration_POLY/gathered_data_mean.csv")
+            df = pd.read_csv("integration_RBF/gathered_data_mean.csv")
 
             # strip any accidental spaces in headers (e.g., " MQ2")
             df.rename(columns=lambda c: c.strip(), inplace=True)
@@ -413,7 +413,7 @@ class ExhaustPage(tk.Frame):
         self.latest_values = ["--.--"] * 4
         self.remaining_time = 900  # 15 minutes exhaust
 
-        self.bg_image = Image.open("integration_POLY/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0,y=0,relwidth=1,relheight=1)
         self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
@@ -429,10 +429,10 @@ class ExhaustPage(tk.Frame):
         self.timer_text_id = self.canvas.create_text(400,250,text="15:00", font=TEXTFONT, fill="white")
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
-                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=700, y=430)
+                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
 
         ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
-            command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=550, y=430)
+            command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=490, y=430)
 
     def start_timer(self, controller):
         self.remaining_time = 900
