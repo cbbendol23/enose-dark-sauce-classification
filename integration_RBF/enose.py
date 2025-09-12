@@ -124,8 +124,8 @@ class StartPage(tk.Frame):
         ttk.Button(canvas, text="Start", style="TButton",
                    command=lambda: [controller.show_frame(ClassificationReadingPage),
                                     controller.frames[ClassificationReadingPage].start_timer(controller)]
-                   ).place(x=300, y=280)
-        ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
+                   ).place(x=295, y=265)
+        ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
 
 # ---------------- CLASSIFICATION PAGE ---------------- #
 class ClassificationPage(tk.Frame):
@@ -151,14 +151,14 @@ class ClassificationPage(tk.Frame):
         start_btn = ttk.Button(canvas, text="Start Classifying", style="TButton",
                    command=lambda: [controller.show_frame(ClassificationReadingPage),
                                     controller.frames[ClassificationReadingPage].start_timer(controller)])
-        start_btn.place(x=300, y=280)
+        start_btn.place(x=285, y=265)
 
         restart_btn = ttk.Button(canvas, text="Restart App", style="Restart.TButton")
         restart_btn.config(command=lambda: restart_program(app=controller.master, button=restart_btn))
-        restart_btn.place(x=100, y=430)
+        restart_btn.place(x=10, y=430)
 
         exit_btn = ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit)
-        exit_btn.place(x=700, y=430)
+        exit_btn.place(x=640, y=430)
 
 # ---------------- CLASSIFICATION READING PAGE ---------------- #
 class ClassificationReadingPage(tk.Frame):
@@ -198,8 +198,8 @@ class ClassificationReadingPage(tk.Frame):
         self.timer_text_id = self.canvas.create_text(400, 250, text="10:00", font=TEXTFONT, fill="white")
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
-                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=700, y=430)
-        ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save).place(x=550, y=430)
+                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
+        ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save).place(x=490, y=430)
 
     # ---------------- SERIAL HANDLING ---------------- #
     def start_timer(self, controller):
@@ -356,8 +356,8 @@ class ResultPage(tk.Frame):
 
         ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
                    command=lambda: [controller.show_frame(ExhaustPage),
-                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=550, y=430)
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=700, y=430)
+                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=490, y=430)
+        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
 
         self.update_results()
 
@@ -429,10 +429,10 @@ class ExhaustPage(tk.Frame):
         self.timer_text_id = self.canvas.create_text(400,250,text="15:00", font=TEXTFONT, fill="white")
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
-                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=700, y=430)
+                   command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
 
         ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
-            command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=550, y=430)
+            command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=490, y=430)
 
     def start_timer(self, controller):
         self.remaining_time = 900
