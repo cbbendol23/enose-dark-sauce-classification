@@ -423,7 +423,7 @@ class ExhaustPage(tk.Frame):
         self.gathering = False
         self.sensor_display_running = False
         self.latest_values = ["--.--"] * 4
-        self.remaining_time = 900  # 15 minutes exhaust
+        self.remaining_time = 1200  # 15 minutes exhaust
 
         self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
@@ -447,7 +447,7 @@ class ExhaustPage(tk.Frame):
             command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=490, y=430)
 
     def start_timer(self, controller):
-        self.remaining_time = 900
+        self.remaining_time = 1200
         self.gathering = True
         self.sensor_display_running = True
         self.latest_values = ["--.--"] * 4
