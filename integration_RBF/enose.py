@@ -215,16 +215,23 @@ class ClassificationReadingPage(tk.Frame):
     def gather_data(self, filename="integration_RBF/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
         sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
         header = ["Label"] + sensor_cols
+        all_data_filename = "integration_RBF/all_gathered_data.csv"  # NEW CSV for storing all data
+
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
                 print("Could not open COM port, skipping gathering")
                 return
 
-            # write header fresh
+            # write header fresh for main file
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
+            # write header fresh for all data file
+            if not os.path.exists(all_data_filename):
+                with open(all_data_filename, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(header)
 
             start_time = time.time()
             while self.gathering:
@@ -233,7 +240,12 @@ class ClassificationReadingPage(tk.Frame):
                     values = line.split(",")
                     if len(values) >= 4:
                         row = ["Unknown"] + values[:4]
+                        # Save to main file
                         with open(filename, "a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(row)
+                        # Save to all data file (append only)
+                        with open(all_data_filename, "a", newline="") as f:
                             writer = csv.writer(f)
                             writer.writerow(row)
                         self.latest_values = values[:4]
