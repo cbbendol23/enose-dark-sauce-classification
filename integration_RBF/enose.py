@@ -215,7 +215,7 @@ class ClassificationReadingPage(tk.Frame):
     def gather_data(self, filename="integration_RBF/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
         sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
         header = ["Label"] + sensor_cols
-        all_data_filename = "integration_RBF/all_gathered_data.csv"  # NEW CSV for storing all data
+        all_data_filename = "integration_RBF/all_gathered_data.csv"  # Only store mean row
 
         try:
             self.ser = open_serial(port, baud)
@@ -228,10 +228,9 @@ class ClassificationReadingPage(tk.Frame):
                 writer = csv.writer(f)
                 writer.writerow(header)
             # write header fresh for all data file
-            if not os.path.exists(all_data_filename):
-                with open(all_data_filename, "w", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(header)
+            with open(all_data_filename, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
 
             start_time = time.time()
             while self.gathering:
@@ -242,10 +241,6 @@ class ClassificationReadingPage(tk.Frame):
                         row = ["Unknown"] + values[:4]
                         # Save to main file
                         with open(filename, "a", newline="") as f:
-                            writer = csv.writer(f)
-                            writer.writerow(row)
-                        # Save to all data file (append only)
-                        with open(all_data_filename, "a", newline="") as f:
                             writer = csv.writer(f)
                             writer.writerow(row)
                         self.latest_values = values[:4]
@@ -260,6 +255,13 @@ class ClassificationReadingPage(tk.Frame):
                                 mwriter.writerow(["Unknown"] + list(means))
                                 mf.flush()
                                 os.fsync(mf.fileno())
+                            # Save mean to all_gathered_data.csv (overwrite each time)
+                            with open(all_data_filename, "w", newline="") as af:
+                                awriter = csv.writer(af)
+                                awriter.writerow(header)
+                                awriter.writerow(["Unknown"] + list(means))
+                                af.flush()
+                                os.fsync(af.fileno())
                         except Exception as e:
                             print(f"Error writing mean to new file: {e}")
         except Exception as e:
