@@ -5,7 +5,6 @@ import threading
 import time, csv, os
 import pandas as pd
 import joblib
-import numpy as np
 from PIL import Image, ImageTk
 import serial
 
@@ -14,6 +13,36 @@ TEXTFONT = ("Segoe UI", 20, "bold")
 BUTTONFONT = ("Segoe UI", 22, "bold")
 EBUTTONFONT = ("Segoe UI", 16, "bold")
 RESULTFONT = ("Segoe UI", 30, "bold")
+
+# ---------------- SENSOR CONFIG ---------------- #
+SENSOR_COLS = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
+SENSOR_COUNT = len(SENSOR_COLS)
+
+# ---------------- BASE DIRECTORY (ALL FILES HERE) ---------------- #
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+RAW_CSV      = os.path.join(BASE_DIR, "gathered_data.csv")
+MEAN_CSV     = os.path.join(BASE_DIR, "gathered_data_mean.csv")
+MEAN_LOG_CSV = os.path.join(BASE_DIR, "gathered_data_mean_log.csv")
+MODEL_PATH   = os.path.join(BASE_DIR, "svm_best_model_RBF.joblib")
+BG_IMAGE     = os.path.join(BASE_DIR, "background.png")
+
+# ---------------- CSV LOG APPENDER---------------- #
+def append_mean_log(means):
+    """
+    Append one row per test to gathered_data_mean_log.csv
+    Format: Label + 6 sensor means
+    """
+    header = ["Label"] + SENSOR_COLS
+    file_exists = os.path.exists(MEAN_LOG_CSV)
+
+    with open(MEAN_LOG_CSV, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(header)
+        writer.writerow(["Unknown"] + list(means))
+        f.flush()
+        os.fsync(f.fileno())
 
 # ---------------- SERIAL PORT MANAGER ---------------- #
 def open_serial(port="/dev/ttyACM0", baud=9600):
@@ -49,6 +78,7 @@ def restart_program(app=None, button=None):
                     frame.stop_serial()
                 except Exception:
                     pass
+
         # Show restarting message
         top = tk.Toplevel(app)
         top.geometry("400x200+300+200")
@@ -60,7 +90,7 @@ def restart_program(app=None, button=None):
             python = sys.executable
             os.execv(python, [python] + sys.argv)
 
-        app.after(800, lambda: _do_restart())
+        app.after(800, _do_restart)
     else:
         python = sys.executable
         os.execv(python, [python] + sys.argv)
@@ -106,7 +136,8 @@ class StartPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
+
+        self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
 
@@ -124,6 +155,7 @@ class StartPage(tk.Frame):
                    command=lambda: [controller.show_frame(ClassificationReadingPage),
                                     controller.frames[ClassificationReadingPage].start_timer(controller)]
                    ).place(x=295, y=265)
+
         ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
 
 # ---------------- CLASSIFICATION PAGE ---------------- #
@@ -131,13 +163,14 @@ class ClassificationPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
+
+        self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
 
         canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
         canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        canvas.create_image(0,0,image=self.bg_photo, anchor="nw")
+        canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
@@ -147,17 +180,16 @@ class ClassificationPage(tk.Frame):
         canvas.create_text(400, 200, text="Please place the Sample Inside the Chamber",
                            font=TEXTFONT, fill="white")
 
-        start_btn = ttk.Button(canvas, text="Start Classifying", style="TButton",
+        ttk.Button(canvas, text="Start Classifying", style="TButton",
                    command=lambda: [controller.show_frame(ClassificationReadingPage),
-                                    controller.frames[ClassificationReadingPage].start_timer(controller)])
-        start_btn.place(x=285, y=265)
+                                    controller.frames[ClassificationReadingPage].start_timer(controller)]
+                   ).place(x=285, y=265)
 
         restart_btn = ttk.Button(canvas, text="Restart App", style="Restart.TButton")
-        restart_btn.config(command=lambda: restart_program(app=controller.master, button=restart_btn))
+        restart_btn.config(command=lambda: restart_program(app=controller, button=restart_btn))
         restart_btn.place(x=10, y=430)
 
-        exit_btn = ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit)
-        exit_btn.place(x=640, y=430)
+        ttk.Button(canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
 
 # ---------------- CLASSIFICATION READING PAGE ---------------- #
 class ClassificationReadingPage(tk.Frame):
@@ -170,18 +202,21 @@ class ClassificationReadingPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
+
         self.ser = None
         self.gathering = False
         self.gather_thread = None
         self.remaining_time = 600
+        self._timer_after_id = None
 
         # Background
-        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
+
         self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.canvas.create_image(0,0,image=self.bg_photo, anchor="nw")
+        self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         # Title
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
@@ -194,147 +229,180 @@ class ClassificationReadingPage(tk.Frame):
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
                    command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
-        ttk.Button(self.canvas, text="Skip", style="Restart.TButton", command=self.skip_and_save).place(x=490, y=430)
+        ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
+                   command=self.skip_and_save).place(x=490, y=430)
 
-    # ---------------- SERIAL HANDLING ---------------- #
     def start_timer(self, controller):
         self.remaining_time = 600
         self.gathering = True
+
+        # Start serial gathering thread
         self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
         self.gather_thread.start()
+
+        # Start UI timer
         self.update_timer(controller)
 
-    def gather_data(self, filename="integration_RBF/gathered_data.csv", port="/dev/ttyACM0", baud=9600):
-        sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
-        header = ["Label"] + sensor_cols
+    def gather_data(self, filename=RAW_CSV, port="/dev/ttyACM0", baud=9600):
+        header = ["Label"] + SENSOR_COLS
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
                 print("Could not open COM port, skipping gathering")
                 return
 
-            # write header fresh
+            # write header fresh (raw csv)
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
 
-            start_time = time.time()
             while self.gathering:
                 line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                if line:
-                    values = line.split(",")
-                    if len(values) >= 4:
-                        row = ["Unknown"] + values[:4]
-                        with open(filename, "a", newline="") as f:
-                            writer = csv.writer(f)
-                            writer.writerow(row)
-                        # Save mean instantly after each new row
-                        try:
-                            df = pd.read_csv(filename).reindex(columns=["Label"] + sensor_cols)
-                            means = df[sensor_cols].astype(float).mean()
-                            mean_filename = "integration_RBF/gathered_data_mean.csv"
-                            with open(mean_filename, "w", newline="") as mf:
-                                mwriter = csv.writer(mf)
-                                mwriter.writerow(header)
-                                mwriter.writerow(["Unknown"] + list(means))
-                                mf.flush()
-                                os.fsync(mf.fileno())
-                        except Exception as e:
-                            print(f"Error writing mean to new file: {e}")
+                if not line:
+                    continue
+
+                values = [v.strip() for v in line.split(",") if v.strip() != ""]
+                if len(values) < SENSOR_COUNT:
+                    continue
+
+                row = ["Unknown"] + values[:SENSOR_COUNT]
+
+                # append raw row
+                with open(filename, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(row)
+
         except Exception as e:
             print(f"Error during data gathering: {e}")
         finally:
             self.stop_serial()
 
+    def _compute_means_from_raw(self):
+        if not os.path.exists(RAW_CSV):
+            raise FileNotFoundError("gathered_data.csv not found")
+
+        df = pd.read_csv(RAW_CSV)
+        if df.empty:
+            raise ValueError("gathered_data.csv is empty")
+
+        df.rename(columns=lambda c: c.strip(), inplace=True)
+        df = df.reindex(columns=["Label"] + SENSOR_COLS)
+
+        means = df[SENSOR_COLS].astype(float).mean()
+        return means
+
+    def _save_mean_and_log_once(self):
+        """
+        Called at end of test (timer end) or on Skip.
+        - overwrites MEAN_CSV (latest mean only)
+        - appends one row to MEAN_LOG_CSV (validation log)
+        """
+        header = ["Label"] + SENSOR_COLS
+        means = self._compute_means_from_raw()
+
+        # overwrite mean file
+        with open(MEAN_CSV, "w", newline="") as mf:
+            mwriter = csv.writer(mf)
+            mwriter.writerow(header)
+            mwriter.writerow(["Unknown"] + list(means))
+            mf.flush()
+            os.fsync(mf.fileno())
+
+        # append validation log (ONE ROW PER TEST)
+        append_mean_log(means)
+
     def update_timer(self, controller):
         minutes = self.remaining_time // 60
         seconds = self.remaining_time % 60
         self.canvas.itemconfig(self.timer_text_id, text=f"{minutes}:{seconds:02d}")
+
         if self.remaining_time > 0 and self.gathering:
             self.remaining_time -= 1
             self._timer_after_id = self.after(1000, self.update_timer, controller)
         else:
             self.gathering = False
             self.stop_serial()
-            # Show processing page for 1 second before result
+
+            # Save mean + append validation log once per test
+            try:
+                self._save_mean_and_log_once()
+            except Exception as e:
+                print(f"Error saving mean/log at timer end: {e}")
+
+            # Processing then results
             controller.show_frame(ProcessingPage)
-            self.after(1000, lambda: [controller.frames[ResultPage].update_results(), controller.show_frame(ResultPage)])
+            self.after(1000, lambda: [controller.frames[ResultPage].update_results(),
+                                      controller.show_frame(ResultPage)])
 
     def skip_and_save(self):
-        if getattr(self, "_timer_after_id", None):
+        # stop timer callback
+        if self._timer_after_id:
             try:
                 self.after_cancel(self._timer_after_id)
-            except:
+            except Exception:
                 pass
             self._timer_after_id = None
+
         self.gathering = False
+        self.stop_serial()
+
+        # Best-effort stop thread quickly
         if self.gather_thread and self.gather_thread.is_alive():
             self.gather_thread.join(timeout=2)
-        # save mean to a new file
+
+        # Save mean + append validation log once per test
         try:
-            sensor_cols = ["MQ2","MQ3","MQ135","MQ136"]
-            header = ["Label"] + sensor_cols
-            if os.path.exists("integration_RBF/gathered_data.csv"):
-                df = pd.read_csv("integration_RBF/gathered_data.csv")
-                if not df.empty:
-                    df = df.reindex(columns=["Label"] + sensor_cols)
-                    means = df[sensor_cols].astype(float).mean()
-                    mean_filename = "integration_RBF/gathered_data_mean.csv"
-                    with open(mean_filename, "w", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(header)
-                        writer.writerow(["Unknown"] + list(means))
-                        f.flush()
-                        os.fsync(f.fileno())
+            self._save_mean_and_log_once()
         except Exception as e:
-            print(f"Error saving mean data on skip: {e}")
+            print(f"Error saving mean/log on skip: {e}")
+
         self.canvas.itemconfig(self.timer_text_id, text="Stopped")
-        self.stop_serial()
-        # Show processing page for 1 second before result
+
         self.controller.show_frame(ProcessingPage)
-        self.after(1000, lambda: [self.controller.frames[ResultPage].update_results(), self.controller.show_frame(ResultPage)])
+        self.after(1000, lambda: [self.controller.frames[ResultPage].update_results(),
+                                  self.controller.show_frame(ResultPage)])
 
 # ---------------- PROCESSING PAGE ---------------- #
 class ProcessingPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
+
+        self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
         tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
+
         canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
         canvas.place(x=0, y=0, relwidth=1, relheight=1)
         canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
+
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose", font=LABELFONT, bg="white").pack(expand=True, fill="both")
-        canvas.create_text(400, 240, text="Processing...", font=TEXTFONT, fill="orange")
+        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
+                 font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
-    def stop_serial(self):
-        self.gathering = False
-        if hasattr(self, 'ser') and self.ser:
-            close_serial(self.ser)
-            self.ser = None
+        canvas.create_text(400, 240, text="Processing...", font=TEXTFONT, fill="orange")
 
 # ---------------- RESULT PAGE ---------------- #
 class ResultPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
+
+        self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
-        tk.Label(self, image=self.bg_photo).place(x=0,y=0,relwidth=1,relheight=1)
+        tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
+
         self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.canvas.create_image(0,0,image=self.bg_photo,anchor="nw")
+        self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5,y=70,anchor="n",width=550,height=45)
+        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
         tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
                  font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
-        # placeholder for result only
-        self.result_text_id = self.canvas.create_text(400,220,text="",font=RESULTFONT, fill="orange")
+        self.result_text_id = self.canvas.create_text(400, 220, text="", font=RESULTFONT, fill="orange")
 
         ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
                    command=lambda: [controller.show_frame(ExhaustPage),
@@ -345,38 +413,36 @@ class ResultPage(tk.Frame):
 
     def update_results(self):
         try:
-            # 1) Load model first so we know the expected columns
-            model = joblib.load("integration_RBF/svm_best_model_RBF.joblib")
-            expected_cols = list(getattr(model, "feature_names_in_", ["MQ2","MQ3","MQ135","MQ136"]))
+            model = joblib.load(MODEL_PATH)
+            expected_cols = list(getattr(model, "feature_names_in_", SENSOR_COLS))
 
-            # 2) Read mean file, clean headers, and enforce column order
-            df = pd.read_csv("integration_RBF/gathered_data_mean.csv")
-
-            # strip any accidental spaces in headers (e.g., " MQ2")
+            df = pd.read_csv(MEAN_CSV)
             df.rename(columns=lambda c: c.strip(), inplace=True)
 
-            # ensure the file has all expected columns
             missing = [c for c in expected_cols if c not in df.columns]
             if missing:
                 raise ValueError(f"Missing columns in gathered_data_mean.csv: {missing}")
 
-            # 3) Get the first row in the exact expected order and as float
             row = df.loc[0, expected_cols].astype(float).tolist()
-
-            # 4) Build a 1-row DataFrame with the exact feature names
             X_infer = pd.DataFrame([row], columns=expected_cols)
 
-            # 5) Predict
             result = model.predict(X_infer)[0]
 
         except Exception as e:
             result = f"Error: {e}"
 
-        color_map = {"Soy Sauce":"#F79503","Fish Sauce":"#F79503",
-                    "Oyster Sauce":"#F79503","Worcestershire Sauce":"#F79503"}
+        color_map = {
+            "Soy Sauce": "#F79503",
+            "Fish Sauce": "#F79503",
+            "Oyster Sauce": "#F79503",
+            "Worcestershire Sauce": "#F79503"
+        }
 
-        self.canvas.itemconfig(self.result_text_id, text=f"RESULT: {result}",
-                            fill=color_map.get(str(result), "orange"))
+        self.canvas.itemconfig(
+            self.result_text_id,
+            text=f"RESULT: {result}",
+            fill=color_map.get(str(result), "orange")
+        )
 
 # ---------------- EXHAUST PAGE ---------------- #
 class ExhaustPage(tk.Frame):
@@ -386,26 +452,29 @@ class ExhaustPage(tk.Frame):
         self.ser = None
         self.gathering = False
         self.remaining_time = 900  # 15 minutes exhaust
+        self._timer_after_id = None
+        self.gather_thread = None
 
-        self.bg_image = Image.open("integration_RBF/background.png").resize((800,480), Image.LANCZOS)
+        self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
-        tk.Label(self, image=self.bg_photo).place(x=0,y=0,relwidth=1,relheight=1)
+        tk.Label(self, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
+
         self.canvas = tk.Canvas(self, width=800, height=480, highlightthickness=0, bd=0)
-        self.canvas.place(x=0,y=0,relwidth=1,relheight=1)
-        self.canvas.create_image(0,0,image=self.bg_photo, anchor="nw")
+        self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5,y=70,anchor="n",width=550,height=45)
+        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
         tk.Label(title_frame, text="Exhaust Process", font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
-        self.canvas.create_text(400,200,text="PROCESS: Exhausting Sensor....", font=TEXTFONT, fill="white")
-        self.timer_text_id = self.canvas.create_text(400,250,text="15:00", font=TEXTFONT, fill="white")
+        self.canvas.create_text(400, 200, text="PROCESS: Exhausting Sensor....", font=TEXTFONT, fill="white")
+        self.timer_text_id = self.canvas.create_text(400, 250, text="15:00", font=TEXTFONT, fill="white")
 
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
                    command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
 
         ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
-            command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=490, y=430)
+                   command=lambda: [self.stop_serial(), controller.show_frame(ClassificationPage)]).place(x=490, y=430)
 
     def start_timer(self, controller):
         self.remaining_time = 900
@@ -421,8 +490,8 @@ class ExhaustPage(tk.Frame):
                 print("Could not open COM port for exhaust")
                 return
             while self.gathering and self.remaining_time > 0:
-                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                # Just read data without storing or displaying
+                _ = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                # Just read data without storing
         except Exception as e:
             print(f"Error during exhaust: {e}")
         finally:
@@ -432,6 +501,7 @@ class ExhaustPage(tk.Frame):
         minutes = self.remaining_time // 60
         seconds = self.remaining_time % 60
         self.canvas.itemconfig(self.timer_text_id, text=f"{minutes:02d}:{seconds:02d}")
+
         if self.remaining_time > 0 and self.gathering:
             self.remaining_time -= 1
             self._timer_after_id = self.after(1000, self.update_timer, controller)
