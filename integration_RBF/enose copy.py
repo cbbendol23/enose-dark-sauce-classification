@@ -13,6 +13,7 @@ TEXTFONT = ("Segoe UI", 20, "bold")
 BUTTONFONT = ("Segoe UI", 22, "bold")
 EBUTTONFONT = ("Segoe UI", 16, "bold")
 RESULTFONT = ("Segoe UI", 30, "bold")
+SENSORFONT = ("Segoe UI", 13, "bold")
 
 # ---------------- SENSOR CONFIG ---------------- #
 SENSOR_COLS = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
@@ -195,6 +196,7 @@ class ClassificationPage(tk.Frame):
 class ClassificationReadingPage(tk.Frame):
     def stop_serial(self):
         self.gathering = False
+        self.sensor_display_running = False
         if hasattr(self, 'ser') and self.ser:
             close_serial(self.ser)
             self.ser = None
@@ -227,6 +229,17 @@ class ClassificationReadingPage(tk.Frame):
         self.canvas.create_text(400, 200, text="PROCESS: Gathering Data....", font=TEXTFONT, fill="white")
         self.timer_text_id = self.canvas.create_text(400, 250, text="10:00", font=TEXTFONT, fill="white")
 
+        self.sensor_display_running = False
+        self.latest_values = ["--.--"] * SENSOR_COUNT
+
+        self.sensor_text_id = self.canvas.create_text(
+            400, 300,
+            text=self._format_sensor_text(),
+            font=SENSORFONT,
+            fill="yellow",
+            justify="center"
+        )
+
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
                    command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
         ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
@@ -235,6 +248,11 @@ class ClassificationReadingPage(tk.Frame):
     def start_timer(self, controller):
         self.remaining_time = 600
         self.gathering = True
+
+        # reset tracking
+        self.latest_values = ["--.--"] * SENSOR_COUNT
+        self.sensor_display_running = True
+        self.update_sensor_display()
 
         # Start serial gathering thread
         self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
@@ -261,11 +279,13 @@ class ClassificationReadingPage(tk.Frame):
                 if not line:
                     continue
 
-                values = [v.strip() for v in line.split(",") if v.strip() != ""]
+                values = [v.strip() for v in line.split(",") if v.strip()]
                 if len(values) < SENSOR_COUNT:
                     continue
 
                 row = ["Unknown"] + values[:SENSOR_COUNT]
+                
+                self.latest_values = values[:SENSOR_COUNT]
 
                 # append raw row
                 with open(filename, "a", newline="") as f:
@@ -290,6 +310,25 @@ class ClassificationReadingPage(tk.Frame):
 
         means = df[SENSOR_COLS].astype(float).mean()
         return means
+    
+    def _format_sensor_text(self):
+        """
+        Auto formats based on SENSOR_COLS and latest_values.
+        Splits into 2 lines (3 sensors per line) for readability on 800x480.
+        """
+        pairs = []
+        for name, val in zip(SENSOR_COLS, self.latest_values):
+            pairs.append(f"{name}: {val}")
+
+        # 3 per line looks clean for 6 sensors; still works for other sizes
+        per_line = 3
+        lines = ["  ".join(pairs[i:i+per_line]) for i in range(0, len(pairs), per_line)]
+        return "\n".join(lines)
+
+    def update_sensor_display(self):
+        self.canvas.itemconfig(self.sensor_text_id, text=self._format_sensor_text())
+        if self.sensor_display_running:
+            self.after(500, self.update_sensor_display)  # 0.5s refresh
 
     def _save_mean_and_log_once(self):
         """
