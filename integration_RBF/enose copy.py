@@ -433,23 +433,66 @@ class ResultPage(tk.Frame):
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
-                 font=LABELFONT, bg="white").pack(expand=True, fill="both")
+        tk.Label(
+            title_frame,
+            text="SVM Dark Condiment Classification using E-Nose",
+            font=LABELFONT,
+            bg="white"
+        ).pack(expand=True, fill="both")
 
-        self.result_text_id = self.canvas.create_text(400, 220, text="", font=RESULTFONT, fill="orange")
+        # Big RESULT text
+        self.result_text_id = self.canvas.create_text(
+            400, 200,
+            text="",
+            font=RESULTFONT,
+            fill="orange"
+        )
 
-        ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
-                   command=lambda: [controller.show_frame(ExhaustPage),
-                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=490, y=430)
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
+        # Mean sensor values (from gathered_data_mean.csv)
+        self.mean_text_id = self.canvas.create_text(
+            400, 300,
+            text="",
+            font=SENSORFONT,
+            fill="yellow",
+            justify="center"
+        )
+
+        ttk.Button(
+            self.canvas,
+            text="Restart",
+            style="Restart.TButton",
+            command=lambda: [
+                controller.show_frame(ExhaustPage),
+                controller.frames[ExhaustPage].start_timer(controller)
+            ]
+        ).place(x=490, y=430)
+
+        ttk.Button(
+            self.canvas,
+            text="Exit",
+            style="Exit.TButton",
+            command=controller.quit
+        ).place(x=640, y=430)
 
         self.update_results()
 
+    def _format_mean_text(self, mean_vals):
+        """
+        mean_vals: list of strings/numbers length SENSOR_COUNT
+        Displays 2 lines (3 sensors per line).
+        """
+        pairs = [f"{n}: {v}" for n, v in zip(SENSOR_COLS, mean_vals)]
+        per_line = 3
+        lines = ["  ".join(pairs[i:i+per_line]) for i in range(0, len(pairs), per_line)]
+        return "\n" + "\n".join(lines)
+
     def update_results(self):
         try:
+            # Load model
             model = joblib.load(MODEL_PATH)
             expected_cols = list(getattr(model, "feature_names_in_", SENSOR_COLS))
 
+            # Read mean CSV written by ClassificationReadingPage
             df = pd.read_csv(MEAN_CSV)
             df.rename(columns=lambda c: c.strip(), inplace=True)
 
@@ -460,10 +503,19 @@ class ResultPage(tk.Frame):
             row = df.loc[0, expected_cols].astype(float).tolist()
             X_infer = pd.DataFrame([row], columns=expected_cols)
 
+            # Predict
             result = model.predict(X_infer)[0]
+
+            missing_means = [c for c in SENSOR_COLS if c not in df.columns]
+            if missing_means:
+                raise ValueError(f"Missing mean columns in gathered_data_mean.csv: {missing_means}")
+
+            mean_vals = df.loc[0, SENSOR_COLS].astype(float).tolist()
+            mean_vals_display = [f"{v:.2f}" for v in mean_vals]
 
         except Exception as e:
             result = f"Error: {e}"
+            mean_vals_display = ["--.--"] * SENSOR_COUNT
 
         color_map = {
             "Soy Sauce": "#F79503",
@@ -476,6 +528,11 @@ class ResultPage(tk.Frame):
             self.result_text_id,
             text=f"RESULT: {result}",
             fill=color_map.get(str(result), "orange")
+        )
+
+        self.canvas.itemconfig(
+            self.mean_text_id,
+            text=self._format_mean_text(mean_vals_display)
         )
 
 # ---------------- EXHAUST PAGE ---------------- #
