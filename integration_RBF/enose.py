@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import threading
 import time, csv, os
+from matplotlib import lines
 import pandas as pd
 import joblib
 from PIL import Image, ImageTk
@@ -13,6 +14,7 @@ TEXTFONT = ("Segoe UI", 20, "bold")
 BUTTONFONT = ("Segoe UI", 22, "bold")
 EBUTTONFONT = ("Segoe UI", 16, "bold")
 RESULTFONT = ("Segoe UI", 30, "bold")
+SENSORFONT = ("Segoe UI", 13, "bold")
 
 # ---------------- SENSOR CONFIG ---------------- #
 SENSOR_COLS = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
@@ -24,7 +26,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_CSV      = os.path.join(BASE_DIR, "gathered_data.csv")
 MEAN_CSV     = os.path.join(BASE_DIR, "gathered_data_mean.csv")
 MEAN_LOG_CSV = os.path.join(BASE_DIR, "gathered_data_mean_log.csv")
-MODEL_PATH   = os.path.join(BASE_DIR, "svm_best_model_RBF.joblib")
+MODEL_PATH   = os.path.join(BASE_DIR, "svm_best_model.joblib")
 BG_IMAGE     = os.path.join(BASE_DIR, "background.png")
 
 # ---------------- CSV LOG APPENDER---------------- #
@@ -193,12 +195,6 @@ class ClassificationPage(tk.Frame):
 
 # ---------------- CLASSIFICATION READING PAGE ---------------- #
 class ClassificationReadingPage(tk.Frame):
-    def stop_serial(self):
-        self.gathering = False
-        if hasattr(self, 'ser') and self.ser:
-            close_serial(self.ser)
-            self.ser = None
-
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
@@ -227,6 +223,17 @@ class ClassificationReadingPage(tk.Frame):
         self.canvas.create_text(400, 200, text="PROCESS: Gathering Data....", font=TEXTFONT, fill="white")
         self.timer_text_id = self.canvas.create_text(400, 250, text="10:00", font=TEXTFONT, fill="white")
 
+        self.sensor_display_running = False
+        self.latest_values = ["--.--"] * SENSOR_COUNT
+
+        self.sensor_text_id = self.canvas.create_text(
+            400, 300,
+            text=self._format_sensor_text(),
+            font=SENSORFONT,
+            fill="yellow",
+            justify="center"
+        )
+
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
                    command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
         ttk.Button(self.canvas, text="Skip", style="Restart.TButton",
@@ -235,6 +242,11 @@ class ClassificationReadingPage(tk.Frame):
     def start_timer(self, controller):
         self.remaining_time = 600
         self.gathering = True
+
+        # reset tracking
+        self.latest_values = ["--.--"] * SENSOR_COUNT
+        self.sensor_display_running = True
+        self.update_sensor_display()
 
         # Start serial gathering thread
         self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
@@ -261,11 +273,13 @@ class ClassificationReadingPage(tk.Frame):
                 if not line:
                     continue
 
-                values = [v.strip() for v in line.split(",") if v.strip() != ""]
+                values = [v.strip() for v in line.split(",") if v.strip()]
                 if len(values) < SENSOR_COUNT:
                     continue
 
                 row = ["Unknown"] + values[:SENSOR_COUNT]
+                
+                self.latest_values = values[:SENSOR_COUNT]
 
                 # append raw row
                 with open(filename, "a", newline="") as f:
@@ -277,39 +291,19 @@ class ClassificationReadingPage(tk.Frame):
         finally:
             self.stop_serial()
 
-    def _compute_means_from_raw(self):
-        if not os.path.exists(RAW_CSV):
-            raise FileNotFoundError("gathered_data.csv not found")
+    def _format_sensor_text(self):
+        pairs = []
+        for name, val in zip(SENSOR_COLS, self.latest_values):
+            pairs.append(f"{name}: {val}")
+            
+        per_line = 3
+        lines = ["  ".join(pairs[i:i+per_line]) for i in range(0, len(pairs), per_line)]
+        return "\n".join(lines)
 
-        df = pd.read_csv(RAW_CSV)
-        if df.empty:
-            raise ValueError("gathered_data.csv is empty")
-
-        df.rename(columns=lambda c: c.strip(), inplace=True)
-        df = df.reindex(columns=["Label"] + SENSOR_COLS)
-
-        means = df[SENSOR_COLS].astype(float).mean()
-        return means
-
-    def _save_mean_and_log_once(self):
-        """
-        Called at end of test (timer end) or on Skip.
-        - overwrites MEAN_CSV (latest mean only)
-        - appends one row to MEAN_LOG_CSV (validation log)
-        """
-        header = ["Label"] + SENSOR_COLS
-        means = self._compute_means_from_raw()
-
-        # overwrite mean file
-        with open(MEAN_CSV, "w", newline="") as mf:
-            mwriter = csv.writer(mf)
-            mwriter.writerow(header)
-            mwriter.writerow(["Unknown"] + list(means))
-            mf.flush()
-            os.fsync(mf.fileno())
-
-        # append validation log (ONE ROW PER TEST)
-        append_mean_log(means)
+    def update_sensor_display(self):
+        self.canvas.itemconfig(self.sensor_text_id, text=self._format_sensor_text())
+        if self.sensor_display_running:
+            self.after(500, self.update_sensor_display)  # 0.5s refresh
 
     def update_timer(self, controller):
         minutes = self.remaining_time // 60
@@ -361,7 +355,47 @@ class ClassificationReadingPage(tk.Frame):
         self.controller.show_frame(ProcessingPage)
         self.after(1000, lambda: [self.controller.frames[ResultPage].update_results(),
                                   self.controller.show_frame(ResultPage)])
+        
+    def _compute_means_from_raw(self):
+        if not os.path.exists(RAW_CSV):
+            raise FileNotFoundError("gathered_data.csv not found")
 
+        df = pd.read_csv(RAW_CSV)
+        if df.empty:
+            raise ValueError("gathered_data.csv is empty")
+
+        df.rename(columns=lambda c: c.strip(), inplace=True)
+        df = df.reindex(columns=["Label"] + SENSOR_COLS)
+
+        means = df[SENSOR_COLS].astype(float).mean()
+        return means
+    
+    def _save_mean_and_log_once(self):
+        """
+        Called at end of test (timer end) or on Skip.
+        - overwrites MEAN_CSV (latest mean only)
+        - appends one row to MEAN_LOG_CSV (validation log)
+        """
+        header = ["Label"] + SENSOR_COLS
+        means = self._compute_means_from_raw()
+
+        # overwrite mean file
+        with open(MEAN_CSV, "w", newline="") as mf:
+            mwriter = csv.writer(mf)
+            mwriter.writerow(header)
+            mwriter.writerow(["Unknown"] + list(means))
+            mf.flush()
+            os.fsync(mf.fileno())
+
+        # append validation log (ONE ROW PER TEST)
+        append_mean_log(means)
+
+    def stop_serial(self):
+        self.gathering = False
+        self.sensor_display_running = False
+        if hasattr(self, 'ser') and self.ser:
+            close_serial(self.ser)
+            self.ser = None
 # ---------------- PROCESSING PAGE ---------------- #
 class ProcessingPage(tk.Frame):
     def __init__(self, parent, controller):
@@ -399,23 +433,66 @@ class ResultPage(tk.Frame):
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
         title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
-                 font=LABELFONT, bg="white").pack(expand=True, fill="both")
+        tk.Label(
+            title_frame,
+            text="SVM Dark Condiment Classification using E-Nose",
+            font=LABELFONT,
+            bg="white"
+        ).pack(expand=True, fill="both")
 
-        self.result_text_id = self.canvas.create_text(400, 220, text="", font=RESULTFONT, fill="orange")
+        # Big RESULT text
+        self.result_text_id = self.canvas.create_text(
+            400, 200,
+            text="",
+            font=RESULTFONT,
+            fill="orange"
+        )
 
-        ttk.Button(self.canvas, text="Restart", style="Restart.TButton",
-                   command=lambda: [controller.show_frame(ExhaustPage),
-                                    controller.frames[ExhaustPage].start_timer(controller)]).place(x=490, y=430)
-        ttk.Button(self.canvas, text="Exit", style="Exit.TButton", command=controller.quit).place(x=640, y=430)
+        # Mean sensor values (from gathered_data_mean.csv)
+        self.mean_text_id = self.canvas.create_text(
+            400, 300,
+            text="",
+            font=SENSORFONT,
+            fill="yellow",
+            justify="center"
+        )
+
+        ttk.Button(
+            self.canvas,
+            text="Restart",
+            style="Restart.TButton",
+            command=lambda: [
+                controller.show_frame(ExhaustPage),
+                controller.frames[ExhaustPage].start_timer(controller)
+            ]
+        ).place(x=490, y=430)
+
+        ttk.Button(
+            self.canvas,
+            text="Exit",
+            style="Exit.TButton",
+            command=controller.quit
+        ).place(x=640, y=430)
 
         self.update_results()
 
+    def _format_mean_text(self, mean_vals):
+        """
+        mean_vals: list of strings/numbers length SENSOR_COUNT
+        Displays 2 lines (3 sensors per line).
+        """
+        pairs = [f"{n}: {v}" for n, v in zip(SENSOR_COLS, mean_vals)]
+        per_line = 3
+        lines = ["  ".join(pairs[i:i+per_line]) for i in range(0, len(pairs), per_line)]
+        return "\n" + "\n".join(lines)
+
     def update_results(self):
         try:
+            # Load model
             model = joblib.load(MODEL_PATH)
             expected_cols = list(getattr(model, "feature_names_in_", SENSOR_COLS))
 
+            # Read mean CSV written by ClassificationReadingPage
             df = pd.read_csv(MEAN_CSV)
             df.rename(columns=lambda c: c.strip(), inplace=True)
 
@@ -426,10 +503,19 @@ class ResultPage(tk.Frame):
             row = df.loc[0, expected_cols].astype(float).tolist()
             X_infer = pd.DataFrame([row], columns=expected_cols)
 
+            # Predict
             result = model.predict(X_infer)[0]
+
+            missing_means = [c for c in SENSOR_COLS if c not in df.columns]
+            if missing_means:
+                raise ValueError(f"Missing mean columns in gathered_data_mean.csv: {missing_means}")
+
+            mean_vals = df.loc[0, SENSOR_COLS].astype(float).tolist()
+            mean_vals_display = [f"{v:.2f}" for v in mean_vals]
 
         except Exception as e:
             result = f"Error: {e}"
+            mean_vals_display = ["--.--"] * SENSOR_COUNT
 
         color_map = {
             "Soy Sauce": "#F79503",
@@ -442,6 +528,11 @@ class ResultPage(tk.Frame):
             self.result_text_id,
             text=f"RESULT: {result}",
             fill=color_map.get(str(result), "orange")
+        )
+
+        self.canvas.itemconfig(
+            self.mean_text_id,
+            text=self._format_mean_text(mean_vals_display)
         )
 
 # ---------------- EXHAUST PAGE ---------------- #
@@ -470,6 +561,17 @@ class ExhaustPage(tk.Frame):
         self.canvas.create_text(400, 200, text="PROCESS: Exhausting Sensor....", font=TEXTFONT, fill="white")
         self.timer_text_id = self.canvas.create_text(400, 250, text="15:00", font=TEXTFONT, fill="white")
 
+        self.latest_values = ["--.--"] * SENSOR_COUNT
+        self.sensor_display_running = False
+
+        self.sensor_text_id = self.canvas.create_text(
+            400, 320,
+            text=self._format_sensor_text(),
+            font=SENSORFONT,
+            fill="yellow",
+            justify="center"
+        )
+
         ttk.Button(self.canvas, text="Exit", style="Exit.TButton",
                    command=lambda: [self.stop_serial(), controller.quit()]).place(x=640, y=430)
 
@@ -479,9 +581,16 @@ class ExhaustPage(tk.Frame):
     def start_timer(self, controller):
         self.remaining_time = 900
         self.gathering = True
+
+        self.latest_values = ["--.--"] * SENSOR_COUNT
+        self.sensor_display_running = True
+        self.update_sensor_display()
+
         self.gather_thread = threading.Thread(target=self.gather_data, daemon=True)
         self.gather_thread.start()
+
         self.update_timer(controller)
+
 
     def gather_data(self, port="/dev/ttyACM0", baud=9600):
         try:
@@ -489,13 +598,40 @@ class ExhaustPage(tk.Frame):
             if not self.ser:
                 print("Could not open COM port for exhaust")
                 return
+
             while self.gathering and self.remaining_time > 0:
-                _ = self.ser.readline().decode('utf-8', errors='ignore').strip()
-                # Just read data without storing
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                if not line:
+                    continue
+
+                values = [v.strip() for v in line.split(",") if v.strip()]
+                if len(values) < SENSOR_COUNT:
+                    continue
+
+                self.latest_values = values[:SENSOR_COUNT]
+
         except Exception as e:
             print(f"Error during exhaust: {e}")
         finally:
             self.stop_serial()
+    
+    def _format_sensor_text(self):
+        pairs = []
+        for name, val in zip(SENSOR_COLS, self.latest_values):
+            pairs.append(f"{name}: {val}")
+
+        per_line = 3
+        lines = ["  ".join(pairs[i:i+per_line]) for i in range(0, len(pairs), per_line)]
+        return "\n".join(lines)
+    
+    def update_sensor_display(self):
+        self.canvas.itemconfig(
+            self.sensor_text_id,
+            text=self._format_sensor_text()
+        )
+        if self.sensor_display_running:
+            self.after(500, self.update_sensor_display)
+
 
     def update_timer(self, controller):
         minutes = self.remaining_time // 60
@@ -512,10 +648,13 @@ class ExhaustPage(tk.Frame):
 
     def stop_serial(self):
         self.gathering = False
+        self.sensor_display_running = False
         if self.ser:
             close_serial(self.ser)
             self.ser = None
 
+
+    
 # ---------------- RUN APP ---------------- #
 if __name__ == "__main__":
     app = App()
