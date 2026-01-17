@@ -2,7 +2,9 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 import threading
-import time, os
+import time, csv, os
+from matplotlib import lines
+import pandas as pd
 import joblib
 from PIL import Image, ImageTk
 import serial
@@ -20,8 +22,29 @@ SENSOR_COUNT = len(SENSOR_COLS)
 
 # ---------------- BASE DIRECTORY (ALL FILES HERE) ---------------- #
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "svm_best_model.joblib")
-BG_IMAGE = os.path.join(BASE_DIR, "background.png")
+
+RAW_CSV      = os.path.join(BASE_DIR, "gathered_data.csv")
+MEAN_CSV     = os.path.join(BASE_DIR, "gathered_data_mean.csv")
+MEAN_LOG_CSV = os.path.join(BASE_DIR, "gathered_data_mean_log.csv")
+MODEL_PATH   = os.path.join(BASE_DIR, "svm_best_model.joblib")
+BG_IMAGE     = os.path.join(BASE_DIR, "background.png")
+
+# ---------------- CSV LOG APPENDER---------------- #
+def append_mean_log(means):
+    """
+    Append one row per test to gathered_data_mean_log.csv
+    Format: Label + 6 sensor means
+    """
+    header = ["Label"] + SENSOR_COLS
+    file_exists = os.path.exists(MEAN_LOG_CSV)
+
+    with open(MEAN_LOG_CSV, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(header)
+        writer.writerow(["Unknown"] + list(means))
+        f.flush()
+        os.fsync(f.fileno())
 
 # ---------------- SERIAL PORT MANAGER ---------------- #
 def open_serial(port="/dev/ttyACM0", baud=9600):
@@ -181,10 +204,6 @@ class ClassificationReadingPage(tk.Frame):
         self.remaining_time = 600
         self._timer_after_id = None
 
-        # In-memory storage for the current run
-        self.samples = []          # list[list[float]] each row has 6 floats
-        self.mean_vals = None      # list[float] computed mean for ResultPage
-
         # Background
         self.bg_image = Image.open(BG_IMAGE).resize((800, 480), Image.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(self.bg_image)
@@ -235,10 +254,6 @@ class ClassificationReadingPage(tk.Frame):
         self.remaining_time = 600
         self.gathering = True
 
-        # reset for new run
-        self.samples = []
-        self.mean_vals = None
-
         self.latest_values = ["--.--"] * SENSOR_COUNT
         self.sensor_display_running = True
         self.update_sensor_display()
@@ -248,51 +263,38 @@ class ClassificationReadingPage(tk.Frame):
 
         self.update_timer(controller)
 
-    def gather_data(self, port="/dev/ttyACM0", baud=9600):
+    def gather_data(self, filename=RAW_CSV, port="/dev/ttyACM0", baud=9600):
+        header = ["Label"] + SENSOR_COLS
         try:
             self.ser = open_serial(port, baud)
             if not self.ser:
                 print("Could not open COM port, skipping gathering")
                 return
 
+            with open(filename, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+
             while self.gathering:
                 line = self.ser.readline().decode("utf-8", errors="ignore").strip()
                 if not line:
                     continue
 
-                parts = [p.strip() for p in line.split(",") if p.strip()]
-                if len(parts) < SENSOR_COUNT:
+                values = [v.strip() for v in line.split(",") if v.strip()]
+                if len(values) < SENSOR_COUNT:
                     continue
 
-                try:
-                    vals = [float(v) for v in parts[:SENSOR_COUNT]]
-                except ValueError:
-                    continue
+                self.latest_values = values[:SENSOR_COUNT]
+                row = ["Unknown"] + self.latest_values
 
-                # for live display
-                self.latest_values = [f"{v:.2f}" for v in vals]
-
-                # store sample in memory
-                self.samples.append(vals)
+                with open(filename, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(row)
 
         except Exception as e:
             print(f"Error during data gathering: {e}")
         finally:
             self.stop_serial()
-
-    def compute_means_in_memory(self):
-        if not self.samples:
-            raise ValueError("No sensor samples collected.")
-        sums = [0.0] * SENSOR_COUNT
-        for row in self.samples:
-            for i, v in enumerate(row):
-                sums[i] += v
-        n = float(len(self.samples))
-        return [s / n for s in sums]
-
-    def save_mean_only(self):
-        # “save” now means compute + store for ResultPage
-        self.mean_vals = self.compute_means_in_memory()
 
     def format_sensor_text(self):
         pairs = [f"{name}: {val}" for name, val in zip(SENSOR_COLS, self.latest_values)]
@@ -320,8 +322,7 @@ class ClassificationReadingPage(tk.Frame):
             try:
                 self.save_mean_only()
             except Exception as e:
-                print(f"Error computing mean at timer end: {e}")
-                self.mean_vals = None
+                print(f"Error saving mean at timer end: {e}")
 
             controller.show_frame(ProcessingPage)
             self.after(1000, lambda: [
@@ -346,8 +347,7 @@ class ClassificationReadingPage(tk.Frame):
         try:
             self.save_mean_only()
         except Exception as e:
-            print(f"Error computing mean on skip: {e}")
-            self.mean_vals = None
+            print(f"Error saving mean on skip: {e}")
 
         self.canvas.itemconfig(self.timer_text_id, text="Stopped")
 
@@ -356,6 +356,29 @@ class ClassificationReadingPage(tk.Frame):
             self.controller.frames[ResultPage].update_results(),
             self.controller.show_frame(ResultPage)
         ])
+
+    def compute_means_from_raw(self):
+        if not os.path.exists(RAW_CSV):
+            raise FileNotFoundError("gathered_data.csv not found")
+
+        df = pd.read_csv(RAW_CSV)
+        if df.empty:
+            raise ValueError("gathered_data.csv is empty")
+
+        df.rename(columns=lambda c: c.strip(), inplace=True)
+        df = df.reindex(columns=["Label"] + SENSOR_COLS)
+        return df[SENSOR_COLS].astype(float).mean()
+
+    def save_mean_only(self):
+        header = ["Label"] + SENSOR_COLS
+        means = self.compute_means_from_raw()
+
+        with open(MEAN_CSV, "w", newline="") as mf:
+            writer = csv.writer(mf)
+            writer.writerow(header)
+            writer.writerow(["Unknown"] + list(means))
+            mf.flush()
+            os.fsync(mf.fileno())
 
     def stop_serial(self):
         self.gathering = False
@@ -450,24 +473,30 @@ class ResultPage(tk.Frame):
 
     def update_results(self):
         try:
+            # Load model
             model = joblib.load(MODEL_PATH)
-
-            # get mean from the reading page (in-memory)
-            reading_page = self.controller.frames[ClassificationReadingPage]
-            means = reading_page.mean_vals
-            if means is None:
-                raise ValueError("No mean values available (collection may have failed).")
-
-            # Ensure correct feature order:
             expected_cols = list(getattr(model, "feature_names_in_", SENSOR_COLS))
 
-            name_to_val = dict(zip(SENSOR_COLS, means))
-            row = [float(name_to_val[c]) for c in expected_cols]
+            # Read mean CSV written by ClassificationReadingPage
+            df = pd.read_csv(MEAN_CSV)
+            df.rename(columns=lambda c: c.strip(), inplace=True)
 
-            # Predict (sklearn expects 2D)
-            result = model.predict([row])[0]
+            missing = [c for c in expected_cols if c not in df.columns]
+            if missing:
+                raise ValueError(f"Missing columns in gathered_data_mean.csv: {missing}")
 
-            mean_vals_display = [f"{v:.2f}" for v in means]
+            row = df.loc[0, expected_cols].astype(float).tolist()
+            X_infer = pd.DataFrame([row], columns=expected_cols)
+
+            # Predict
+            result = model.predict(X_infer)[0]
+
+            missing_means = [c for c in SENSOR_COLS if c not in df.columns]
+            if missing_means:
+                raise ValueError(f"Missing mean columns in gathered_data_mean.csv: {missing_means}")
+
+            mean_vals = df.loc[0, SENSOR_COLS].astype(float).tolist()
+            mean_vals_display = [f"{v:.2f}" for v in mean_vals]
 
         except Exception as e:
             result = f"Error: {e}"
@@ -533,6 +562,7 @@ class ExhaustPage(tk.Frame):
             fill="white"
         )
 
+
         self.latest_values = ["--.--"] * SENSOR_COUNT
         self.sensor_display_running = False
 
@@ -589,12 +619,11 @@ class ExhaustPage(tk.Frame):
                 if not line:
                     continue
 
-                parts = [p.strip() for p in line.split(",") if p.strip()]
-                if len(parts) < SENSOR_COUNT:
+                values = [v.strip() for v in line.split(",") if v.strip()]
+                if len(values) < SENSOR_COUNT:
                     continue
 
-                # show as-is (no float conversion required for exhaust display)
-                self.latest_values = parts[:SENSOR_COUNT]
+                self.latest_values = values[:SENSOR_COUNT]
 
         except Exception as e:
             print(f"Error during exhaust: {e}")
