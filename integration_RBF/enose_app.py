@@ -18,7 +18,7 @@ SENSORFONT = ("Segoe UI", 13, "bold")
 SENSOR_COLS = ["MQ2", "MQ3", "MQ135", "MQ136", "MQ137", "MQ138"]
 SENSOR_COUNT = len(SENSOR_COLS)
 
-# ---------------- BASE DIRECTORY (ALL FILES HERE) ---------------- #
+# ---------------- BASE DIRECTORY ---------------- #
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "svm_best_model.joblib")
 BG_IMAGE = os.path.join(BASE_DIR, "background.png")
