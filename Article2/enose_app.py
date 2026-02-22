@@ -20,8 +20,19 @@ SENSOR_COUNT = len(SENSOR_COLS)
 
 # ---------------- BASE DIRECTORY ---------------- #
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "svm_best_model.joblib")
+ENSEMBLE_MODEL_PATH = os.path.join(BASE_DIR, "ensemble_model.joblib")
+LABEL_ENCODER_PATH  = os.path.join(BASE_DIR, "label_encoder.joblib")
 BG_IMAGE = os.path.join(BASE_DIR, "background.png")
+
+# ---------------- LOAD MODEL ONCE ---------------- #
+try:
+    ENSEMBLE_MODEL = joblib.load(ENSEMBLE_MODEL_PATH)
+    LABEL_ENCODER = joblib.load(LABEL_ENCODER_PATH)
+    print("Ensemble model + label encoder loaded.")
+except Exception as e:
+    ENSEMBLE_MODEL = None
+    LABEL_ENCODER = None
+    print(f"Failed to load model/encoder: {e}")
 
 # ---------------- SERIAL PORT MANAGER ---------------- #
 def open_serial(port="/dev/ttyACM0", baud=9600):
@@ -124,8 +135,8 @@ class StartPage(tk.Frame):
         canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
+        title_frame.place(relx=0.5, y=70, anchor="n", width=650, height=45)
+        tk.Label(title_frame, text="Ensemble Learning Dark Condiment Classification using E-Nose",
                  font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
         canvas.create_text(400, 200, text="Press Start to Begin!", font=TEXTFONT, fill="white")
@@ -151,8 +162,8 @@ class ClassificationPage(tk.Frame):
         canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
+        title_frame.place(relx=0.5, y=70, anchor="n", width=650, height=45)
+        tk.Label(title_frame, text="Ensemble Learning Dark Condiment Classification using E-Nose",
                  font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
         canvas.create_text(400, 200, text="Please place the Sample Inside the Chamber",
@@ -196,10 +207,10 @@ class ClassificationReadingPage(tk.Frame):
 
         # Title
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
+        title_frame.place(relx=0.5, y=70, anchor="n", width=650, height=45)
         tk.Label(
             title_frame,
-            text="SVM Dark Condiment Classification using E-Nose",
+            text="Ensemble Learning Dark Condiment Classification using E-Nose",
             font=LABELFONT,
             bg="white"
         ).pack(expand=True, fill="both")
@@ -379,8 +390,8 @@ class ProcessingPage(tk.Frame):
         canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
-        tk.Label(title_frame, text="SVM Dark Condiment Classification using E-Nose",
+        title_frame.place(relx=0.5, y=70, anchor="n", width=650, height=45)
+        tk.Label(title_frame, text="Ensemble Learning Dark Condiment Classification using E-Nose",
                  font=LABELFONT, bg="white").pack(expand=True, fill="both")
 
         canvas.create_text(400, 240, text="Processing...", font=TEXTFONT, fill="orange")
@@ -400,10 +411,10 @@ class ResultPage(tk.Frame):
         self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
+        title_frame.place(relx=0.5, y=70, anchor="n", width=650, height=45)
         tk.Label(
             title_frame,
-            text="SVM Dark Condiment Classification using E-Nose",
+            text="Ensemble Learning Dark Condiment Classification using E-Nose",
             font=LABELFONT,
             bg="white"
         ).pack(expand=True, fill="both")
@@ -450,22 +461,22 @@ class ResultPage(tk.Frame):
 
     def update_results(self):
         try:
-            model = joblib.load(MODEL_PATH)
+            if ENSEMBLE_MODEL is None or LABEL_ENCODER is None:
+                raise ValueError("Model or label encoder not loaded.")
 
-            # get mean from the reading page (in-memory)
             reading_page = self.controller.frames[ClassificationReadingPage]
             means = reading_page.mean_vals
             if means is None:
-                raise ValueError("No mean values available (collection may have failed).")
+                raise ValueError("No mean values available.")
 
-            # Ensure correct feature order:
-            expected_cols = list(getattr(model, "feature_names_in_", SENSOR_COLS))
+            # Build row using SAME ORDER as training
+            row = [float(v) for v in means]   # already in SENSOR_COLS order
 
-            name_to_val = dict(zip(SENSOR_COLS, means))
-            row = [float(name_to_val[c]) for c in expected_cols]
+            # Predict (encoded)
+            pred_encoded = ENSEMBLE_MODEL.predict([row])[0]
 
-            # Predict (sklearn expects 2D)
-            result = model.predict([row])[0]
+            # Decode back to sauce label
+            result = LABEL_ENCODER.inverse_transform([pred_encoded])[0]
 
             mean_vals_display = [f"{v:.2f}" for v in means]
 
@@ -511,7 +522,7 @@ class ExhaustPage(tk.Frame):
         self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
 
         title_frame = tk.Frame(self, bg="white", bd=0, relief="flat")
-        title_frame.place(relx=0.5, y=70, anchor="n", width=550, height=45)
+        title_frame.place(relx=0.5, y=70, anchor="n", width=650, height=45)
         tk.Label(
             title_frame,
             text="Exhaust Process",
